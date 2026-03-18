@@ -1,7 +1,7 @@
 # BQ268 CAF 4.4 — MSM8909 port from 3.18
 # Phase 0: repo setup, toolchain verification
 
-toolchain := "/opt/toolchains/gcc-linaro-4.9.4-2017.01-x86_64_arm-linux-gnueabihf/bin/arm-linux-gnueabihf-"
+toolchain := "/opt/toolchains/gcc-linaro-7.4.1-2019.02-x86_64_arm-linux-gnueabihf/bin/arm-linux-gnueabihf-"
 out := "output"
 mkbootimg := "tools/mkbootimg/mkbootimg.py"
 defconfig := "msm8909_defconfig"
