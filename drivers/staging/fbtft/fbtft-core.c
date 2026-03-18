@@ -266,11 +266,11 @@ static int fbtft_backlight_get_brightness(struct backlight_device *bd)
 
 void fbtft_unregister_backlight(struct fbtft_par *par)
 {
-	if (par->info->bl_dev) {
-		par->info->bl_dev->props.power = FB_BLANK_POWERDOWN;
-		backlight_update_status(par->info->bl_dev);
-		backlight_device_unregister(par->info->bl_dev);
-		par->info->bl_dev = NULL;
+	if (par->bl_dev) {
+		par->bl_dev->props.power = FB_BLANK_POWERDOWN;
+		backlight_update_status(par->bl_dev);
+		backlight_device_unregister(par->bl_dev);
+		par->bl_dev = NULL;
 	}
 }
 
@@ -304,7 +304,7 @@ void fbtft_register_backlight(struct fbtft_par *par)
 			PTR_ERR(bd));
 		return;
 	}
-	par->info->bl_dev = bd;
+	par->bl_dev = bd;
 
 	if (!par->fbtftops.unregister_backlight)
 		par->fbtftops.unregister_backlight = fbtft_unregister_backlight;
@@ -974,13 +974,11 @@ int fbtft_register_framebuffer(struct fb_info *fb_info)
 		fb_info->fix.smem_len >> 10, text1,
 		HZ / fb_info->fbdefio->delay, text2);
 
-#ifdef CONFIG_FB_BACKLIGHT
 	/* Turn on backlight if available */
-	if (fb_info->bl_dev) {
-		fb_info->bl_dev->props.power = FB_BLANK_UNBLANK;
-		fb_info->bl_dev->ops->update_status(fb_info->bl_dev);
+	if (par->bl_dev) {
+		par->bl_dev->props.power = FB_BLANK_UNBLANK;
+		par->bl_dev->ops->update_status(par->bl_dev);
 	}
-#endif
 
 	return 0;
 

@@ -14,6 +14,7 @@ obj-$(CONFIG_MSM_GLINK_SMEM_NATIVE_XPRT)+=	glink_smem_native_xprt.o
 obj-$(CONFIG_MSM_GLINK_SPI_XPRT)	+=	glink_spi_xprt.o
 obj-$(CONFIG_MSM_SMEM_LOGGING)	+=	smem_log.o
 obj-$(CONFIG_MSM_SYSMON_GLINK_COMM)	+= sysmon-glink.o sysmon-qmi.o
+obj-$(CONFIG_MSM_SYSMON_COMM)	+= sysmon.o sysmon-qmi.o
 obj-$(CONFIG_ARCH_MSM8996) +=	kryo-l2-accessors.o
 obj-$(CONFIG_MSM_SMP2P)	+=	smp2p.o smp2p_debug.o smp2p_sleepstate.o
 obj-$(CONFIG_MSM_SMP2P_TEST)	+=	smp2p_loopback.o smp2p_test.o smp2p_spinlock_test.o

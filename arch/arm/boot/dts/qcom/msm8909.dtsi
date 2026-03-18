@@ -78,6 +78,10 @@
 			device_type = "cpu";
 			compatible = "arm,cortex-a7";
 			reg = <0x0>;
+			enable-method = "qcom,kpss-acc-v2";
+			next-level-cache = <&L2>;
+			qcom,acc = <&acc0>;
+			qcom,saw = <&saw0>;
 			qcom,sleep-status = <&cpu0_slp_sts>;
 			qcom,limits-info = <&mitigation_profile0>;
 		};
@@ -86,6 +90,10 @@
 			device_type = "cpu";
 			compatible = "arm,cortex-a7";
 			reg = <0x1>;
+			enable-method = "qcom,kpss-acc-v2";
+			next-level-cache = <&L2>;
+			qcom,acc = <&acc1>;
+			qcom,saw = <&saw1>;
 			qcom,sleep-status = <&cpu1_slp_sts>;
 			qcom,limits-info = <&mitigation_profile2>;
 		};
@@ -94,6 +102,10 @@
 			device_type = "cpu";
 			compatible = "arm,cortex-a7";
 			reg = <0x2>;
+			enable-method = "qcom,kpss-acc-v2";
+			next-level-cache = <&L2>;
+			qcom,acc = <&acc2>;
+			qcom,saw = <&saw2_acc>;
 			qcom,sleep-status = <&cpu2_slp_sts>;
 			qcom,limits-info = <&mitigation_profile1>;
 		};
@@ -102,8 +114,18 @@
 			device_type = "cpu";
 			compatible = "arm,cortex-a7";
 			reg = <0x3>;
+			enable-method = "qcom,kpss-acc-v2";
+			next-level-cache = <&L2>;
+			qcom,acc = <&acc3>;
+			qcom,saw = <&saw3>;
 			qcom,sleep-status = <&cpu3_slp_sts>;
 			qcom,limits-info = <&mitigation_profile2>;
+		};
+
+		L2: l2-cache {
+			compatible = "cache";
+			cache-level = <2>;
+			qcom,saw = <&saw_l2>;
 		};
 	};
 
@@ -319,6 +341,52 @@
 		clocks = <&clock_rpm clk_rpm_debug_mux>;
 		clock-names = "rpm_debug_mux";
 		#clock-cells = <1>;
+	};
+
+	acc0: clock-controller@b088000 {
+		compatible = "qcom,kpss-acc-v2";
+		reg = <0x0b088000 0x1000>, <0x0b008000 0x1000>;
+	};
+
+	acc1: clock-controller@b098000 {
+		compatible = "qcom,kpss-acc-v2";
+		reg = <0x0b098000 0x1000>, <0x0b008000 0x1000>;
+	};
+
+	acc2: clock-controller@b0a8000 {
+		compatible = "qcom,kpss-acc-v2";
+		reg = <0x0b0a8000 0x1000>, <0x0b008000 0x1000>;
+	};
+
+	acc3: clock-controller@b0b8000 {
+		compatible = "qcom,kpss-acc-v2";
+		reg = <0x0b0b8000 0x1000>, <0x0b008000 0x1000>;
+	};
+
+	saw0: power-controller@b089000 {
+		compatible = "qcom,saw2";
+		reg = <0x0b089000 0x1000>, <0x0b009000 0x1000>;
+	};
+
+	saw1: power-controller@b099000 {
+		compatible = "qcom,saw2";
+		reg = <0x0b099000 0x1000>, <0x0b009000 0x1000>;
+	};
+
+	saw2_acc: power-controller@b0a9000 {
+		compatible = "qcom,saw2";
+		reg = <0x0b0a9000 0x1000>, <0x0b009000 0x1000>;
+	};
+
+	saw3: power-controller@b0b9000 {
+		compatible = "qcom,saw2";
+		reg = <0x0b0b9000 0x1000>, <0x0b009000 0x1000>;
+	};
+
+	saw_l2: power-controller@b012000 {
+		compatible = "qcom,saw2";
+		reg = <0x0b012000 0x1000>;
+		regulator;
 	};
 
 	clock_cpu: qcom,clock-a7@0b011050 {
