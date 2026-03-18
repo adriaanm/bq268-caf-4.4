@@ -33,3 +33,7 @@ obj-$(CONFIG_SND_SOC_INT_CODEC) += snd-soc-int-codec.o
 snd-soc-ext-codec-objs := sdm660-external.o sdm660-ext-dai-links.o
 obj-$(CONFIG_SND_SOC_EXT_CODEC) += snd-soc-sdm660-common.o
 obj-$(CONFIG_SND_SOC_EXT_CODEC) += snd-soc-ext-codec.o
+
+# for MSM8909 sound card driver
+snd-soc-msm8909-objs := msm8952.o msm-audio-pinctrl.o
+obj-$(CONFIG_SND_SOC_MSM8909) += snd-soc-msm8909.o
