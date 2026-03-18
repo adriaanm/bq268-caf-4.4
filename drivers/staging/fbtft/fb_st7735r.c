@@ -1,5 +1,6 @@
 /*
  * FB driver for the ST7735R LCD Controller
+ * BQ268 ST7735S init sequence from bootloader (panel_st7735s_cmd.h)
  *
  * Copyright (C) 2013 Noralf Tronnes
  *
@@ -7,83 +8,40 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
  */
 
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
+#include <video/mipi_display.h>
 
 #include "fbtft.h"
 
 #define DRVNAME "fb_st7735r"
-#define DEFAULT_GAMMA   "0F 1A 0F 18 2F 28 20 22 1F 1B 23 37 00 07 02 10\n" \
-			"0F 1B 0F 17 33 2C 29 2E 30 30 39 3F 00 07 03 10"
+/* BQ268 ST7735S gamma from bootloader (panel_st7735s_cmd.h) */
+#define DEFAULT_GAMMA   "04 22 07 0A 2E 30 25 2A 28 26 2E 3A 00 01 03 13\n" \
+			"04 16 06 0D 2D 26 23 27 27 25 2D 3B 00 01 04 13"
 
+/* Init sequence matching BQ268 bootloader (ST7735S) */
 static int default_init_sequence[] = {
-	/* SWRESET - Software reset */
-	-1, 0x01,
-	-2, 150,                               /* delay */
+	-1, MIPI_DCS_EXIT_SLEEP_MODE,
+	-2, 120,
 
-	/* SLPOUT - Sleep out & booster on */
-	-1, 0x11,
-	-2, 500,                               /* delay */
+	-1, 0xB1, 0x05, 0x3C, 0x3C,           /* FRMCTR1 */
+	-1, 0xB2, 0x05, 0x3C, 0x3C,           /* FRMCTR2 */
+	-1, 0xB3, 0x05, 0x3C, 0x3C, 0x05, 0x3C, 0x3C, /* FRMCTR3 */
+	-1, 0xB4, 0x03,                        /* INVCTR */
+	-1, 0xC0, 0x28, 0x08, 0x04,           /* PWCTR1 */
+	-1, 0xC1, 0xC0,                        /* PWCTR2 */
+	-1, 0xC2, 0x0D, 0x00,                 /* PWCTR3 */
+	-1, 0xC3, 0x8D, 0x2A,                 /* PWCTR4 */
+	-1, 0xC4, 0x8D, 0xEE,                 /* PWCTR5 */
+	-1, 0xC5, 0x1A,                        /* VMCTR1 */
 
-	/* FRMCTR1 - frame rate control: normal mode
-	     frame rate = fosc / (1 x 2 + 40) * (LINE + 2C + 2D) */
-	-1, 0xB1, 0x01, 0x2C, 0x2D,
+	-1, MIPI_DCS_SET_PIXEL_FORMAT, MIPI_DCS_PIXEL_FMT_16BIT,
 
-	/* FRMCTR2 - frame rate control: idle mode
-	     frame rate = fosc / (1 x 2 + 40) * (LINE + 2C + 2D) */
-	-1, 0xB2, 0x01, 0x2C, 0x2D,
-
-	/* FRMCTR3 - frame rate control - partial mode
-	     dot inversion mode, line inversion mode */
-	-1, 0xB3, 0x01, 0x2C, 0x2D, 0x01, 0x2C, 0x2D,
-
-	/* INVCTR - display inversion control
-	     no inversion */
-	-1, 0xB4, 0x07,
-
-	/* PWCTR1 - Power Control
-	     -4.6V, AUTO mode */
-	-1, 0xC0, 0xA2, 0x02, 0x84,
-
-	/* PWCTR2 - Power Control
-	     VGH25 = 2.4C VGSEL = -10 VGH = 3 * AVDD */
-	-1, 0xC1, 0xC5,
-
-	/* PWCTR3 - Power Control
-	     Opamp current small, Boost frequency */
-	-1, 0xC2, 0x0A, 0x00,
-
-	/* PWCTR4 - Power Control
-	     BCLK/2, Opamp current small & Medium low */
-	-1, 0xC3, 0x8A, 0x2A,
-
-	/* PWCTR5 - Power Control */
-	-1, 0xC4, 0x8A, 0xEE,
-
-	/* VMCTR1 - Power Control */
-	-1, 0xC5, 0x0E,
-
-	/* INVOFF - Display inversion off */
-	-1, 0x20,
-
-	/* COLMOD - Interface pixel format */
-	-1, 0x3A, 0x05,
-
-	/* DISPON - Display On */
-	-1, 0x29,
-	-2, 100,                               /* delay */
-
-	/* NORON - Partial off (Normal) */
-	-1, 0x13,
-	-2, 10,                               /* delay */
+	-1, MIPI_DCS_SET_DISPLAY_ON,
+	-2, 10,
 
 	/* end marker */
 	-3
@@ -91,14 +49,13 @@ static int default_init_sequence[] = {
 
 static void set_addr_win(struct fbtft_par *par, int xs, int ys, int xe, int ye)
 {
-	/* Column address */
-	write_reg(par, 0x2A, xs >> 8, xs & 0xFF, xe >> 8, xe & 0xFF);
+	write_reg(par, MIPI_DCS_SET_COLUMN_ADDRESS,
+		  xs >> 8, xs & 0xFF, xe >> 8, xe & 0xFF);
 
-	/* Row address */
-	write_reg(par, 0x2B, ys >> 8, ys & 0xFF, ye >> 8, ye & 0xFF);
+	write_reg(par, MIPI_DCS_SET_PAGE_ADDRESS,
+		  ys >> 8, ys & 0xFF, ye >> 8, ye & 0xFF);
 
-	/* Memory write */
-	write_reg(par, 0x2C);
+	write_reg(par, MIPI_DCS_WRITE_MEMORY_START);
 }
 
 #define MY BIT(7)
@@ -114,16 +71,20 @@ static int set_var(struct fbtft_par *par)
 		RGB-BGR ORDER color filter panel: 0=RGB, 1=BGR */
 	switch (par->info->var.rotate) {
 	case 0:
-		write_reg(par, 0x36, MX | MY | (par->bgr << 3));
+		write_reg(par, MIPI_DCS_SET_ADDRESS_MODE,
+			  MX | MY | (par->bgr << 3));
 		break;
 	case 270:
-		write_reg(par, 0x36, MY | MV | (par->bgr << 3));
+		write_reg(par, MIPI_DCS_SET_ADDRESS_MODE,
+			  MY | MV | (par->bgr << 3));
 		break;
 	case 180:
-		write_reg(par, 0x36, par->bgr << 3);
+		write_reg(par, MIPI_DCS_SET_ADDRESS_MODE,
+			  par->bgr << 3);
 		break;
 	case 90:
-		write_reg(par, 0x36, MX | MV | (par->bgr << 3));
+		write_reg(par, MIPI_DCS_SET_ADDRESS_MODE,
+			  MX | MV | (par->bgr << 3));
 		break;
 	}
 
