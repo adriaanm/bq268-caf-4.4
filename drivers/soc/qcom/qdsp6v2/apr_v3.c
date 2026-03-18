@@ -24,7 +24,15 @@
 
 enum apr_subsys_state apr_get_subsys_state(void)
 {
-	return apr_get_modem_state();
+	/*
+	 * MSM8909: no separate LPASS — modem Q6 handles audio.
+	 * Map APR_SUBSYS_UP to APR_SUBSYS_LOADED so audio services
+	 * see the subsystem as ready.
+	 */
+	enum apr_subsys_state state = apr_get_modem_state();
+	if (state == APR_SUBSYS_UP)
+		state = APR_SUBSYS_LOADED;
+	return state;
 }
 
 void apr_set_subsys_state(void)
