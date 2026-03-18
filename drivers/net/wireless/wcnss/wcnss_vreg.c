@@ -419,10 +419,10 @@ static void wcnss_vregs_off(struct vregs_info regulators[], uint size,
 
 		/* Remove PWM mode */
 		if (regulators[i].state & VREG_OPTIMUM_MODE_MASK) {
-			rc = regulator_set_optimum_mode(
+			rc = regulator_set_load(
 					regulators[i].regulator, 0);
 			if (rc < 0)
-				pr_err("regulator_set_optimum_mode(%s) failed (%d)\n",
+				pr_err("regulator_set_load(%s) failed (%d)\n",
 						regulators[i].name, rc);
 		}
 
@@ -518,10 +518,10 @@ static int wcnss_vregs_on(struct device *dev,
 
 		/* Vote for PWM/PFM mode if needed */
 		if (voltage_level[i].uA_load && (reg_cnt > 0)) {
-			rc = regulator_set_optimum_mode(regulators[i].regulator,
+			rc = regulator_set_load(regulators[i].regulator,
 					voltage_level[i].uA_load);
 			if (rc < 0) {
-				pr_err("regulator_set_optimum_mode(%s) failed (%d)\n",
+				pr_err("regulator_set_load(%s) failed (%d)\n",
 						regulators[i].name, rc);
 				goto fail;
 			}

@@ -55,6 +55,24 @@ ported_files = set([
     "msm8952-dai-links.c",
     "msm8952-slimbus.c",
     "msm8916-wcd-irq.c",
+    "wlan_hdd_cfg80211.h",
+    "wlan_hdd_assoc.c",
+    "wlan_hdd_main.c",
+    "wlan_hdd_cfg80211.c",
+    "wlan_hdd_tx_rx.c",
+    "wlan_hdd_wext.c",
+    "wlan_hdd_scan.c",
+    "wlan_hdd_hostapd.c",
+    "wlan_hdd_softap_tx_rx.c",
+    "wlan_hdd_p2p.c",
+    "wlan_hdd_tdls.c",
+    "wlan_hdd_early_suspend.c",
+    "dot11f.c",
+    "macTrace.c",
+    "limProcessMessageQueue.c",
+    "smeApi.c",
+    "csrApiRoam.c",
+    "csrNeighborRoam.c",
 ])
 
 # Capture the name of the object file, can find it.
@@ -69,6 +87,10 @@ def interpret_warning(line):
         # Check if this is a ported file (suppress all warnings)
         fname = m.group(2).split(':')[0]
         if fname in ported_files:
+            return
+        # Suppress all warnings from prima wlan driver
+        full_path = m.group(1) + m.group(2).split(':')[0]
+        if '/prima/' in full_path:
             return
         print("error, forbidden warning:", m.group(2))
 
