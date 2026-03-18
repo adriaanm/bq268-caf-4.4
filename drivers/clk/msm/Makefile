@@ -27,5 +27,12 @@ ifeq ($(CONFIG_COMMON_CLK_MSM), y)
 	obj-$(CONFIG_ARCH_MSM8998)	+= clock-osm.o
 endif
 
+# MSM 8909
+ifeq ($(CONFIG_COMMON_CLK_MSM), y)
+	obj-$(CONFIG_ARCH_MSM8909) += clock-rpm-8909.o
+	obj-$(CONFIG_ARCH_MSM8909) += clock-gcc-8909.o
+	obj-$(CONFIG_ARCH_MSM8909) += clock-a7.o
+endif
+
 obj-$(CONFIG_COMMON_CLK_MSM)	+= gdsc.o
 obj-$(CONFIG_COMMON_CLK_MSM)	+= mdss/

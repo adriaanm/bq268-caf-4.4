@@ -71,6 +71,34 @@ config ARCH_SDM630
 	This enables support for the SDM630 chipset. If you do not
 	wish to build a kernel that runs on this chipset, say 'N' here.
 
+config ARCH_MSM8909
+	bool "Enable support for MSM8909"
+	select CLKDEV_LOOKUP
+	select HAVE_CLK
+	select HAVE_CLK_PREPARE
+	select PM_OPP
+	select SOC_BUS
+	select MSM_IRQ
+	select ARM_GIC
+	select SPARSE_IRQ
+	select MULTI_IRQ_HANDLER
+	select HAVE_ARM_ARCH_TIMER
+	select MAY_HAVE_SPARSE_IRQ
+	select CPU_V7
+	select HAVE_SMP
+	select PINCTRL
+	select MSM_PM if PM
+	select MSM_RPM_SMD
+	select CPU_FREQ
+	select CPU_FREQ_MSM
+	select PM_DEVFREQ
+	select QMI_ENCDEC
+	select ARCH_WANT_KMAP_ATOMIC_FLUSH
+	select GENERIC_IRQ_MIGRATION
+	help
+	This enables support for the MSM8909 chipset. If you do not
+	wish to build a kernel that runs on this chipset, say 'N' here.
+
 config ARCH_MSM8X60
 	bool "Enable support for MSM8X60"
 	select ARCH_SUPPORTS_BIG_ENDIAN
