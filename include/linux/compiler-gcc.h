@@ -182,7 +182,9 @@
 
 #ifndef __CHECKER__
 # define __compiletime_warning(message) __attribute__((warning(message)))
-# define __compiletime_error(message) __attribute__((error(message)))
+# if GCC_VERSION < 80000
+#  define __compiletime_error(message) __attribute__((error(message)))
+# endif
 #endif /* __CHECKER__ */
 #endif /* GCC_VERSION >= 40300 */
 

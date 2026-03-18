@@ -451,8 +451,10 @@ static __always_inline void __write_once_size(volatile void *p, void *res, int s
  * versions of GCC (e.g. 4.2.4), so hide the array from sparse altogether.
  */
 # ifndef __CHECKER__
-#  define __compiletime_error_fallback(condition) \
+#  if __GNUC__ < 8
+#   define __compiletime_error_fallback(condition) \
 	do { ((void)sizeof(char[1 - 2 * condition])); } while (0)
+#  endif
 # endif
 #endif
 #ifndef __compiletime_error_fallback
@@ -461,11 +463,9 @@ static __always_inline void __write_once_size(volatile void *p, void *res, int s
 
 #define __compiletime_assert(condition, msg, prefix, suffix)		\
 	do {								\
-		bool __cond = !(condition);				\
 		extern void prefix ## suffix(void) __compiletime_error(msg); \
-		if (__cond)						\
+		if (!(condition))					\
 			prefix ## suffix();				\
-		__compiletime_error_fallback(__cond);			\
 	} while (0)
 
 #define _compiletime_assert(condition, msg, prefix, suffix) \

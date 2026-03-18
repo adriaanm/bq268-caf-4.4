@@ -610,6 +610,12 @@ ARCH_CFLAGS :=
 include arch/$(SRCARCH)/Makefile
 
 KBUILD_CFLAGS	+= $(call cc-option,-fno-delete-null-pointer-checks,)
+# GCC 8+ compatibility
+KBUILD_CFLAGS	+= $(call cc-disable-warning,attribute-alias,)
+KBUILD_CFLAGS	+= $(call cc-disable-warning,stringop-truncation,)
+KBUILD_CFLAGS	+= $(call cc-disable-warning,stringop-overflow,)
+KBUILD_CFLAGS	+= $(call cc-disable-warning,sizeof-pointer-memaccess,)
+KBUILD_CFLAGS	+= $(call cc-disable-warning,packed-not-aligned,)
 
 ifdef CONFIG_CC_OPTIMIZE_FOR_SIZE
 KBUILD_CFLAGS	+= -Os $(call cc-disable-warning,maybe-uninitialized,)
