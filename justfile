@@ -5,7 +5,7 @@ toolchain := "/opt/toolchains/gcc-linaro-7.4.1-2019.02-x86_64_arm-linux-gnueabih
 out := "output"
 mkbootimg := "tools/mkbootimg/mkbootimg.py"
 defconfig := "msm8909_defconfig"
-cmdline := "androidboot.hardware=qcom msm_rtb.filter=0x237 ehci-hcd.park=3 androidboot.bootdevice=7824900.sdhci lpm_levels.sleep_disabled=1 earlyprintk panic=5 ramoops.mem_address=0x9ff00000 ramoops.mem_size=0x40000 ramoops.console_size=0x20000 ramoops.record_size=0x10000 ramoops.pmsg_size=0x10000 console=tty0 console=ttyHSL0,115200 fbcon=rotate:3 consoleblank=0 root=/dev/mmcblk0p36 rootfstype=ext4 rootwait rw"
+cmdline := "androidboot.hardware=qcom androidboot.bootdevice=7824900.sdhci earlyprintk panic=5 console=tty0 consoleblank=0 loglevel=7 root=/dev/mmcblk0p36 rootfstype=ext4 rootwait rw"
 serial_tty := "/dev/ttyACM0"
 
 kmake := "make ARCH=arm CROSS_COMPILE=" + toolchain + " O=" + out

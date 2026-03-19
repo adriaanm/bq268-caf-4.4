@@ -296,10 +296,10 @@
 			spi-max-frequency = <16000000>;
 			reset-gpios = <&msm_gpio 2 1>; /* GPIO_ACTIVE_LOW */
 			dc-gpios = <&msm_gpio 3 0>;
-			rotation = <90>;
-			fps = <20>;
+			rotate = <90>;
+			fps = <40>;
 			buswidth = <8>;
-			txbuflen = <4096>;
+			txbuflen = <20480>;
 			width = <128>;
 			height = <160>;
 		};
