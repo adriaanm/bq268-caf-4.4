@@ -58,6 +58,8 @@ obj-$(CONFIG_QCOM_SMD) +=	smd.o
 obj-$(CONFIG_QCOM_SMD_RPM)	+= smd-rpm.o
 obj-$(CONFIG_QCOM_SMEM) +=	smem.o
 obj-$(CONFIG_MSM_SPM) += msm-spm.o spm_devices.o
+obj-$(CONFIG_MSM_PM) += msm-pm.o pm-boot.o
+obj-$(CONFIG_CPU_V7) += idle-v7.o
 CFLAGS_scm.o :=$(call as-instr,.arch_extension sec,-DREQUIRES_SEC=1)
 
 obj-$(CONFIG_QCOM_SCM_ERRATA) += scm-errata.o

@@ -332,6 +332,16 @@ static void update_debug_pc_event(enum debug_event event, uint32_t arg1,
 	spin_unlock(&debug_lock);
 }
 
+static void setup_broadcast_timer(void *arg)
+{
+	unsigned long reason = (unsigned long)arg;
+
+	if (reason)
+		tick_broadcast_enable();
+	else
+		tick_broadcast_disable();
+}
+
 static int lpm_cpu_callback(struct notifier_block *cpu_nb,
 	unsigned long action, void *hcpu)
 {
@@ -339,6 +349,11 @@ static int lpm_cpu_callback(struct notifier_block *cpu_nb,
 	struct lpm_cluster *cluster = per_cpu(cpu_cluster, (unsigned int) cpu);
 
 	switch (action & ~CPU_TASKS_FROZEN) {
+	case CPU_ONLINE:
+		if (!use_psci)
+			smp_call_function_single(cpu, setup_broadcast_timer,
+						(void *)true, 1);
+		break;
 	case CPU_DYING:
 		cluster_prepare(cluster, get_cpu_mask((unsigned int) cpu),
 					NR_LPM_LEVELS, false, 0);
@@ -1562,8 +1577,18 @@ static int lpm_cpuidle_enter(struct cpuidle_device *dev,
 	if (need_resched() || (idx < 0))
 		goto exit;
 
-	BUG_ON(!use_psci);
-	success = psci_enter_sleep(cluster, idx, true);
+	if (use_psci) {
+		success = psci_enter_sleep(cluster, idx, true);
+	} else {
+		if (idx > 0)
+			update_debug_pc_event(CPU_ENTER, idx,
+					0xdeaffeed, 0xdeaffeed, true);
+		success = msm_cpu_pm_enter_sleep(
+				cluster->cpu->levels[idx].mode, true);
+		if (idx > 0)
+			update_debug_pc_event(CPU_EXIT, idx,
+					success, 0xdeaffeed, true);
+	}
 
 exit:
 	end_time = ktime_to_ns(ktime_get());
@@ -1808,8 +1833,12 @@ static int lpm_suspend_enter(suspend_state_t state)
 	 */
 	clock_debug_print_enabled();
 
-	BUG_ON(!use_psci);
-	psci_enter_sleep(cluster, idx, true);
+	if (use_psci) {
+		psci_enter_sleep(cluster, idx, true);
+	} else {
+		msm_cpu_pm_enter_sleep(
+				cluster->cpu->levels[idx].mode, false);
+	}
 
 	if (idx > 0)
 		update_debug_pc_event(CPU_EXIT, idx, true, 0xdeaffeed,
@@ -1877,6 +1906,11 @@ static int lpm_probe(struct platform_device *pdev)
 		goto failed;
 	}
 	register_hotcpu_notifier(&lpm_cpu_nblk);
+	if (!use_psci) {
+		get_cpu();
+		on_each_cpu(setup_broadcast_timer, (void *)true, 1);
+		put_cpu();
+	}
 	module_kobj = kset_find_obj(module_kset, KBUILD_MODNAME);
 	if (!module_kobj) {
 		pr_err("%s: cannot find kobject for module %s\n",
