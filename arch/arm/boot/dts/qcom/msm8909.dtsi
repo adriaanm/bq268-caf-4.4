@@ -1129,7 +1129,7 @@
 		interrupt-names = "periph_irq";
 		qcom,channel = <0>;
 		qcom,ee = <0>;
-		#interrupt-cells = <3>;
+		#interrupt-cells = <4>;
 		interrupt-controller;
 		#address-cells = <2>;
 		#size-cells = <0>;

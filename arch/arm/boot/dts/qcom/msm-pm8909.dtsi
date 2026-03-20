@@ -11,6 +11,7 @@
  */
 
 #include <dt-bindings/spmi/spmi.h>
+#include <dt-bindings/interrupt-controller/irq.h>
 
 &spmi_bus {
 
@@ -28,8 +29,8 @@
 		pm8909_pon: qcom,power-on@800 {
 			compatible = "qcom,qpnp-power-on";
 			reg = <0x800 0x100>;
-			interrupts = <0x0 0x8 0x0>,
-				     <0x0 0x8 0x1>;
+			interrupts = <0x0 0x8 0x0 IRQ_TYPE_EDGE_BOTH>,
+				     <0x0 0x8 0x1 IRQ_TYPE_EDGE_BOTH>;
 			interrupt-names = "kpdpwr", "resin";
 			qcom,pon-dbc-delay = <15625>;
 			qcom,system-reset;
@@ -118,7 +119,7 @@
 			reg = <0x3100 0x100>;
 			#address-cells = <1>;
 			#size-cells = <0>;
-			interrupts = <0x0 0x31 0x0>;
+			interrupts = <0x0 0x31 0x0 IRQ_TYPE_EDGE_RISING>;
 			interrupt-names = "eoc-int-en-set";
 			qcom,adc-bit-resolution = <15>;
 			qcom,adc-vdd-reference = <1800>;
@@ -164,9 +165,9 @@
 			reg = <0x3400 0x100>;
 			#address-cells = <1>;
 			#size-cells = <0>;
-			interrupts =	<0x0 0x34 0x0>,
-					<0x0 0x34 0x3>,
-					<0x0 0x34 0x4>;
+			interrupts =	<0x0 0x34 0x0 IRQ_TYPE_EDGE_RISING>,
+					<0x0 0x34 0x3 IRQ_TYPE_EDGE_RISING>,
+					<0x0 0x34 0x4 IRQ_TYPE_EDGE_RISING>;
 			interrupt-names =	"eoc-int-en-set",
 						"high-thr-en-set",
 						"low-thr-en-set";
@@ -188,7 +189,7 @@
 			};
 			qcom,pm8909_rtc_alarm@6100 {
 				reg = <0x6100 0x100>;
-				interrupts = <0x0 0x61 0x1>;
+				interrupts = <0x0 0x61 0x1 IRQ_TYPE_EDGE_RISING>;
 			};
 		};
 
@@ -225,10 +226,10 @@
 
 			qcom,chgr@1000 {
 				reg = <0x1000 0x100>;
-				interrupts =	<0x0 0x10 0x7>,
-						<0x0 0x10 0x6>,
-						<0x0 0x10 0x5>,
-						<0x0 0x10 0x0>;
+				interrupts =	<0x0 0x10 0x7 IRQ_TYPE_EDGE_RISING>,
+						<0x0 0x10 0x6 IRQ_TYPE_EDGE_RISING>,
+						<0x0 0x10 0x5 IRQ_TYPE_EDGE_RISING>,
+						<0x0 0x10 0x0 IRQ_TYPE_EDGE_RISING>;
 				interrupt-names =	"chg-done",
 							"chg-failed",
 							"fast-chg-on",
@@ -237,17 +238,17 @@
 
 			qcom,bat-if@1200 {
 				reg = <0x1200 0x100>;
-				interrupts =	<0x0 0x12 0x1>,
-						<0x0 0x12 0x0>;
+				interrupts =	<0x0 0x12 0x1 IRQ_TYPE_EDGE_RISING>,
+						<0x0 0x12 0x0 IRQ_TYPE_EDGE_RISING>;
 				interrupt-names =	"bat-temp-ok",
 							"batt-pres";
 			};
 
 			qcom,usb-chgpth@1300 {
 				reg = <0x1300 0x100>;
-				interrupts =	<0 0x13 0x4>,
-						<0 0x13 0x2>,
-						<0 0x13 0x1>;
+				interrupts =	<0 0x13 0x4 IRQ_TYPE_EDGE_RISING>,
+						<0 0x13 0x2 IRQ_TYPE_EDGE_RISING>,
+						<0 0x13 0x1 IRQ_TYPE_EDGE_RISING>;
 				interrupt-names =	"usb-over-temp",
 							"chg-gone",
 							"usbin-valid";
@@ -261,7 +262,7 @@
 		pm8909_tz: qcom,temp-alarm@2400 {
 			compatible = "qcom,qpnp-temp-alarm";
 			reg = <0x2400 0x100>;
-			interrupts = <0x0 0x24 0x0>;
+			interrupts = <0x0 0x24 0x0 IRQ_TYPE_EDGE_RISING>;
 			label = "pm8909_tz";
 			qcom,channel-num = <8>;
 			qcom,threshold-set = <0>;
@@ -307,10 +308,10 @@
 
 			qcom,vm-bms@4000 {
 				reg = <0x4000 0x100>;
-				interrupts =	<0x0 0x40 0x0>,
-						<0x0 0x40 0x3>,
-						<0x0 0x40 0x4>,
-						<0x0 0x40 0x5>;
+				interrupts =	<0x0 0x40 0x0 IRQ_TYPE_EDGE_RISING>,
+						<0x0 0x40 0x3 IRQ_TYPE_EDGE_RISING>,
+						<0x0 0x40 0x4 IRQ_TYPE_EDGE_RISING>,
+						<0x0 0x40 0x5 IRQ_TYPE_EDGE_RISING>;
 
 				interrupt-names = "leave_cv",
 						  "ocv_thr",
@@ -496,14 +497,14 @@
 			compatible = "qcom,msm8x16_wcd_codec";
 			reg = <0xf000 0x100>;
 			interrupt-parent = <&spmi_bus>;
-			interrupts = <0x1 0xf0 0x0>,
-				     <0x1 0xf0 0x1>,
-				     <0x1 0xf0 0x2>,
-				     <0x1 0xf0 0x3>,
-				     <0x1 0xf0 0x4>,
-				     <0x1 0xf0 0x5>,
-				     <0x1 0xf0 0x6>,
-				     <0x1 0xf0 0x7>;
+			interrupts = <0x1 0xf0 0x0 IRQ_TYPE_NONE>,
+				     <0x1 0xf0 0x1 IRQ_TYPE_NONE>,
+				     <0x1 0xf0 0x2 IRQ_TYPE_NONE>,
+				     <0x1 0xf0 0x3 IRQ_TYPE_NONE>,
+				     <0x1 0xf0 0x4 IRQ_TYPE_EDGE_BOTH>,
+				     <0x1 0xf0 0x5 IRQ_TYPE_EDGE_BOTH>,
+				     <0x1 0xf0 0x6 IRQ_TYPE_EDGE_BOTH>,
+				     <0x1 0xf0 0x7 IRQ_TYPE_EDGE_BOTH>;
 			interrupt-names = "spk_cnp_int",
 					  "spk_clip_int",
 					  "spk_ocp_int",
@@ -547,12 +548,12 @@
 			compatible = "qcom,msm8x16_wcd_codec";
 			reg = <0xf100 0x100>;
 			interrupt-parent = <&spmi_bus>;
-			interrupts = <0x1 0xf1 0x0>,
-				     <0x1 0xf1 0x1>,
-				     <0x1 0xf1 0x2>,
-				     <0x1 0xf1 0x3>,
-				     <0x1 0xf1 0x4>,
-				     <0x1 0xf1 0x5>;
+			interrupts = <0x1 0xf1 0x0 IRQ_TYPE_NONE>,
+				     <0x1 0xf1 0x1 IRQ_TYPE_NONE>,
+				     <0x1 0xf1 0x2 IRQ_TYPE_NONE>,
+				     <0x1 0xf1 0x3 IRQ_TYPE_NONE>,
+				     <0x1 0xf1 0x4 IRQ_TYPE_NONE>,
+				     <0x1 0xf1 0x5 IRQ_TYPE_NONE>;
 			interrupt-names = "ear_ocp_int",
 					  "hphr_ocp_int",
 					  "hphl_ocp_det",
