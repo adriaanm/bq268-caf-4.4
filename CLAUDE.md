@@ -12,9 +12,10 @@ Port the MSM8909 BQ268 walkie-talkie from a working 3.18 CAF kernel to 4.4 CAF. 
 
 ## Reference
 
-- **3.18 working kernel**: `~/bq268-caf_msm-3.18`
+- **3.18 working kernel**: `~/bq268-caf_msm-3.18` (read-only reference — request changes through user)
+- **Alpine rootfs**: `~/bq268-alpine` (read-only reference — request changes through user)
 - **Toolchain**: GCC 7.4.1 at `/opt/toolchains/gcc-linaro-7.4.1-2019.02-x86_64_arm-linux-gnueabihf/`
-- **Rootfs**: Alpine 3.21.3 on eMMC partition 36
+- **Rootfs**: Alpine 3.21.3 on eMMC partition 36 (built/managed by `~/bq268-alpine`)
 - **Learnings & architecture decisions**: see `LEARNINGS.md`
 
 ## Reproducibility
@@ -29,7 +30,7 @@ Every repeated command goes in the `justfile`. Run `just` to list recipes.
 
 ## Workflow: Iteration Cycle
 
-The device boots our 4.4 kernel via `fastboot boot` (RAM, not flashed). The 3.18 kernel remains on the boot partition. Reboot goes through 3.18 as intermediary because SPMI/PON doesn't probe on 4.4 yet.
+The device boots our 4.4 kernel via `fastboot boot` (RAM, not flashed). The 3.18 kernel remains on the boot partition. Reboot-to-bootloader works directly from 4.4 via SPMI/PON (IMEM magic + warm reset).
 
 - **`just cycle`** — build initramfs image → `fastboot boot` → wait for serial → grab dmesg (requires device in fastboot)
 - **`just recycle`** — reboot current device → cycle (fully autonomous, no manual intervention)
@@ -90,7 +91,7 @@ When porting a subsystem from 3.18 to 4.4:
 | GCC 7.4 | GCC 8+ breaks BUILD_BUG_ON; GCC 4.9 works but old |
 | lpm-levels disabled | Breaks timer in idle; sleep hangs. WFI via default arch_cpu_idle works. |
 | always-on arch timer | Prevents C3STOP handoff to broken broadcast timer |
-| Two-hop reboot | 4.4 SPMI children don't enumerate → no PON → reboot via 3.18 |
+| ~~Two-hop reboot~~ | ~~4.4 SPMI children don't enumerate → no PON → reboot via 3.18~~ (resolved: SPMI+PON work, direct reboot-to-bootloader from 4.4) |
 
 ## Known Issues
 
@@ -98,5 +99,5 @@ When porting a subsystem from 3.18 to 4.4:
 |-------|--------|-------|
 | sleep() hangs with lpm-levels | **Workaround**: lpm-levels disabled in DTS | Timer works in periodic (402 IRQs boot) and during busywait (13920 IRQs), but dies when CPU enters idle via lpm-levels. Not C3STOP, not deep idle, not broadcast enable — something in cpuidle registration or probe breaks the per-CPU timer. |
 | Bus scaling crashes | **Workaround**: QCOM_BUS_SCALING + BIMC_BWMON disabled | Kernel hangs before init when enabled. Needs DT or driver debug. |
-| SPMI child enumeration | **Open** | PMIC ARB probes but no child devices (pm8909@0, PON, etc). Blocks QPNP PON (reboot-to-bootloader) and other PMIC drivers. |
+| SPMI child enumeration | **Resolved** | Fixed: 4.4-style DT bindings (2-cell reg, compatible, 4-cell interrupts) + CONFIG_MFD_SPMI_PMIC. PM8909 detected, PON/RTC/VADC probe OK. |
 | Broadcast timer (arch_mem_timer) | **Open** | Selected as broadcast device, in oneshot mode, but 0 interrupts ever. Blocks deep idle (standalone_pc, pc). |

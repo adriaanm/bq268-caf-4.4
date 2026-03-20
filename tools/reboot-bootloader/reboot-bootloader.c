@@ -50,6 +50,9 @@ int main(void)
 	close(fd);
 
 	sync();
+	/* RESTART2("bootloader") triggers a warm reset (preserves IMEM)
+	 * and writes the restart_reason via msm-poweroff.c.
+	 * Plain RESTART does a hard reset which clears IMEM. */
 	syscall(__NR_reboot,
 		LINUX_REBOOT_MAGIC1,
 		LINUX_REBOOT_MAGIC2,
