@@ -13,6 +13,13 @@ mount -t debugfs debugfs /sys/kernel/debug 2>/dev/null
 mount -t tmpfs tmpfs /tmp
 mount -t configfs configfs /sys/kernel/config
 
+# Mount rootfs partition for firmware files
+mkdir -p /mnt/rootfs
+mount -o ro /dev/mmcblk0p36 /mnt/rootfs 2>/dev/null
+if [ -d /mnt/rootfs/lib/firmware ]; then
+    ln -s /mnt/rootfs/lib/firmware /lib/firmware
+fi
+
 hostname bq268-caf
 
 CON=/dev/tty0
@@ -29,6 +36,12 @@ echo -e "\033[2J\033[H" > $CON
 grep arch_timer /proc/interrupts > $CON
 sleep 1
 echo "SLEEP OK" > $CON
+
+# Trigger modem/ADSP firmware load via PIL
+if [ -f /sys/kernel/boot_adsp/boot ]; then
+    echo 1 > /sys/kernel/boot_adsp/boot
+    echo "PIL: modem load triggered" > $CON
+fi
 
 # If we get here, sleep works — red/green blink to confirm
 i=0
