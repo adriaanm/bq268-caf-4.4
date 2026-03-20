@@ -249,7 +249,6 @@
 			     <1 1 0xf08>;
 		clock-frequency = <19200000>;
 		always-on;
-		arm,cpu-registers-not-fw-configured;
 	};
 
 	timer@b020000 {

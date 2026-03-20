@@ -24,14 +24,11 @@ echo 255 > $GREEN 2>/dev/null
 echo 0   > $RED   2>/dev/null
 
 # Dump timer diagnostics to screen
-# Clear screen — show all timer IRQs, busywait, show again
+# Clear screen — show timer IRQs then test sleep
 echo -e "\033[2J\033[H" > $CON
-echo "BEFORE:" > $CON
-grep -i timer /proc/interrupts > $CON
-# Short busywait (~2-5s depending on CPU freq)
-i=0; while [ $i -lt 3000000 ]; do i=$((i+1)); done
-echo "AFTER:" > $CON
-grep -i timer /proc/interrupts > $CON
+grep arch_timer /proc/interrupts > $CON
+sleep 1
+echo "SLEEP OK" > $CON
 
 # If we get here, sleep works — red/green blink to confirm
 i=0

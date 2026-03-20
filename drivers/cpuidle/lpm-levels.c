@@ -1906,11 +1906,20 @@ static int lpm_probe(struct platform_device *pdev)
 		goto failed;
 	}
 	register_hotcpu_notifier(&lpm_cpu_nblk);
+	/*
+	 * Broadcast timer enable disabled — the broadcast device
+	 * (arch_mem_timer) never fires interrupts on MSM8909, and
+	 * enabling broadcast causes the per-CPU timer to stop being
+	 * used for tick delivery, breaking sleep(). Deep idle states
+	 * are also disabled in the BQ268 DTS, so broadcast isn't needed.
+	 */
+#if 0
 	if (!use_psci) {
 		get_cpu();
 		on_each_cpu(setup_broadcast_timer, (void *)true, 1);
 		put_cpu();
 	}
+#endif
 	module_kobj = kset_find_obj(module_kset, KBUILD_MODNAME);
 	if (!module_kobj) {
 		pr_err("%s: cannot find kobject for module %s\n",
