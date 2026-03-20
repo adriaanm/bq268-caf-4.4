@@ -803,6 +803,30 @@
 	};
 };
 
+/* ════════════════════════════════════════════════════════════════════════
+ *  13. CPU Idle — disable deep states (broadcast timer broken)
+ *
+ *  standalone_pc and pc require the broadcast timer (arch_mem_timer)
+ *  to wake CPUs, but it never fires (0 interrupts observed). Until
+ *  broadcast is fixed, only WFI is safe. Without this, sleep() hangs.
+ * ════════════════════════════════════════════════════════════════════════ */
+
+&soc {
+	qcom,lpm-levels {
+		qcom,pm-cluster@0 {
+			qcom,pm-cpu {
+				/delete-node/ qcom,pm-cpu-level@1;
+				/delete-node/ qcom,pm-cpu-level@2;
+			};
+
+			/* L2 levels that require min-child-idx > 0 are now
+			 * unreachable — delete to avoid lpm-levels errors */
+			/delete-node/ qcom,pm-cluster-level@1;
+			/delete-node/ qcom,pm-cluster-level@2;
+		};
+	};
+};
+
 /* Disable sensors that claim keypad GPIOs */
 &i2c_1 {
 	mpu6050@68 {

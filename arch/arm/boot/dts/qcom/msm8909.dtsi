@@ -248,7 +248,6 @@
 			     <1 4 0xf08>,
 			     <1 1 0xf08>;
 		clock-frequency = <19200000>;
-		always-on;
 	};
 
 	timer@b020000 {
