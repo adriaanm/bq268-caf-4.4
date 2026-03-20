@@ -24,24 +24,12 @@ echo 255 > $GREEN 2>/dev/null
 echo 0   > $RED   2>/dev/null
 
 # Dump timer diagnostics to screen
-echo "=== BQ268 4.4 init ===" > $CON
-
-# Dump broadcast device state from timer_list
-echo "Broadcast:" > $CON
-grep -A2 'Broadcast' /proc/timer_list 2>/dev/null | head -3 > $CON
-
-# Show tick device mode
-echo "Tick dev:" > $CON
-grep -B1 'mode:' /proc/timer_list 2>/dev/null | grep -E 'mode:|Tick' | head -4 > $CON
-
-# Show arch timer interrupts
-echo "IRQs:" > $CON
-grep -i 'arch.*timer\|Timer broadcast' /proc/interrupts 2>/dev/null | head -3 > $CON
-
-# Show UDC
-echo "UDC: $(ls /sys/class/udc/ 2>/dev/null)" > $CON
-
-# Test sleep — try 1 second
+# Clear screen, dump only broadcast info (11 lines max)
+echo -e "\033[2J\033[H" > $CON
+grep -A3 'Broadcast' /proc/timer_list 2>/dev/null | head -5 > $CON
+echo "---" > $CON
+grep 'arch.*timer' /proc/interrupts 2>/dev/null > $CON
+echo "---" > $CON
 echo "sleep 1..." > $CON
 sleep 1
 echo "sleep OK!" > $CON
