@@ -688,20 +688,7 @@
 	};
 };
 
-&pm8909_gpios {
-	gpio@c100 { /* GPIO 2 */
-		status = "disabled";
-	};
-};
-
-&pm8909_mpps {
-	mpp@a100 { /* MPP 2 */
-		status = "disabled";
-	};
-	mpp@a300 { /* MPP 4 */
-		status = "okay";
-	};
-};
+/* GPIO/MPP overrides removed — 4.4 pinctrl driver uses flat node model */
 
 /* ════════════════════════════════════════════════════════════════════════
  *  11. Misc

@@ -37,12 +37,6 @@ grep arch_timer /proc/interrupts > $CON
 sleep 1
 echo "SLEEP OK" > $CON
 
-# Trigger modem/ADSP firmware load via PIL
-if [ -f /sys/kernel/boot_adsp/boot ]; then
-    echo 1 > /sys/kernel/boot_adsp/boot
-    echo "PIL: modem load triggered" > $CON
-fi
-
 # If we get here, sleep works — red/green blink to confirm
 i=0
 while [ $i -lt 2 ]; do
@@ -113,6 +107,13 @@ else
         echo 255 > $GREEN 2>/dev/null
         j=0; while [ $j -lt 5000000 ]; do j=$((j+1)); done
     done
+fi
+
+# Trigger modem/ADSP firmware load via PIL (after USB serial is up)
+if [ -f /sys/kernel/boot_adsp/boot ]; then
+    echo "PIL: triggering modem firmware load..." > $CON
+    echo 1 > /sys/kernel/boot_adsp/boot
+    echo "PIL: modem load triggered" > $CON
 fi
 
 # Keep init alive

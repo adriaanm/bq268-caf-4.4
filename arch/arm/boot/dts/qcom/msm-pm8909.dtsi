@@ -54,64 +54,26 @@
 			};
 		};
 
-		pm8909_mpps: mpps {
-			compatible = "qcom,qpnp-pin";
-			spmi-dev-container;
+		pm8909_mpps: mpps@a000 {
+			compatible = "qcom,pm8916-mpp";
+			reg = <0xa000 0x400>;
 			gpio-controller;
 			#gpio-cells = <2>;
-			#address-cells = <1>;
-			#size-cells = <1>;
-			label = "pm8909-mpp";
-
-			mpp@a000 {
-				reg = <0xa000 0x100>;
-				qcom,pin-num = <1>;
-			};
-
-			mpp@a100 {
-				reg = <0xa100 0x100>;
-				qcom,pin-num = <2>;
-			};
-
-			mpp@a200 {
-				reg = <0xa200 0x100>;
-				qcom,pin-num = <3>;
-			};
-
-			mpp@a300 {
-				reg = <0xa300 0x100>;
-				qcom,pin-num = <4>;
-			};
+			interrupts = <0 0xa0 0 IRQ_TYPE_NONE>,
+				     <0 0xa1 0 IRQ_TYPE_NONE>,
+				     <0 0xa2 0 IRQ_TYPE_NONE>,
+				     <0 0xa3 0 IRQ_TYPE_NONE>;
 		};
 
-		pm8909_gpios: gpios {
-			compatible = "qcom,qpnp-pin";
-			spmi-dev-container;
+		pm8909_gpios: gpios@c000 {
+			compatible = "qcom,pm8916-gpio";
+			reg = <0xc000 0x400>;
 			gpio-controller;
 			#gpio-cells = <2>;
-			#address-cells = <1>;
-			#size-cells = <1>;
-			label = "pm8909-gpio";
-
-			gpio@c000 {
-				reg = <0xc000 0x100>;
-				qcom,pin-num = <1>;
-			};
-
-			gpio@c100 {
-				reg = <0xc100 0x100>;
-				qcom,pin-num = <2>;
-			};
-
-			gpio@c200 {
-				reg = <0xc200 0x100>;
-				qcom,pin-num = <3>;
-			};
-
-			gpio@c300 {
-				reg = <0xc300 0x100>;
-				qcom,pin-num = <4>;
-			};
+			interrupts = <0 0xc0 0 IRQ_TYPE_NONE>,
+				     <0 0xc1 0 IRQ_TYPE_NONE>,
+				     <0 0xc2 0 IRQ_TYPE_NONE>,
+				     <0 0xc3 0 IRQ_TYPE_NONE>;
 		};
 
 		pm8909_vadc: vadc@3100 {
