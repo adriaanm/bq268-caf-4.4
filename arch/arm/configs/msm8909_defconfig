@@ -190,7 +190,11 @@ CONFIG_SENSORS_QPNP_ADC_VOLTAGE=y
 # CONFIG_MSM_PIL is not set
 
 # Audio disabled for bring-up
-# CONFIG_SOUND is not set
+# Audio
+CONFIG_SOUND=y
+CONFIG_SND=y
+CONFIG_SND_SOC=y
+CONFIG_SND_SOC_MSM8909=y
 
 # Debug
 CONFIG_PRINTK_TIME=y
