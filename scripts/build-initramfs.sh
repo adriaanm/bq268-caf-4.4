@@ -41,7 +41,7 @@ for applet in sh ash ls cat echo mkdir mount umount sleep \
     vi less more wc sort uniq tr tee \
     devmem hexdump dd free uptime hostname \
     find xargs printf test expr seq \
-    tar gzip gunzip df du stat id whoami \
+    tar gzip gunzip df du stat id whoami uname \
     setsid cttyhack; do
     ln -sf busybox "$INITRAMFS/bin/$applet"
 done
