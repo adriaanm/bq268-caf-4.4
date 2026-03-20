@@ -6157,10 +6157,20 @@ static int msm8x16_wcd_spmi_probe(struct platform_device *pdev)
 	dev_dbg(&pdev->dev, "%s(%d):slave ID = 0x%x\n",
 		__func__, __LINE__,  parent_spmi->usid);
 
-	wcd_resource = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (!wcd_resource) {
-		dev_err(&pdev->dev, "Unable to get Tombak base address\n");
-		return -ENXIO;
+	/* platform_get_resource fails because the SPMI parent has no
+	 * ranges property, so address translation doesn't work.
+	 * Read the base address directly from the DT reg property. */
+	{
+		u32 reg_addr;
+		if (of_property_read_u32(pdev->dev.of_node, "reg", &reg_addr)) {
+			dev_err(&pdev->dev, "Unable to get Tombak base address\n");
+			return -ENXIO;
+		}
+		wcd_resource = devm_kzalloc(&pdev->dev,
+			sizeof(*wcd_resource), GFP_KERNEL);
+		if (!wcd_resource)
+			return -ENOMEM;
+		wcd_resource->start = reg_addr;
 	}
 
 	switch (wcd_resource->start) {
