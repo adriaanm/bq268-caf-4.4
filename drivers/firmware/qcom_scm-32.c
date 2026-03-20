@@ -215,10 +215,11 @@ static int __qcom_scm_call(const struct qcom_scm_command *cmd)
 	u32 cmd_addr = virt_to_phys(cmd);
 
 	/*
-	 * Flush the command buffer so that the secure world sees
-	 * the correct data.
+	 * Flush the entire cache so that the secure world sees
+	 * the correct data. MSM8909 TZ requires full cache flush,
+	 * not just the command buffer (matches 3.18 behavior).
 	 */
-	secure_flush_area(cmd, cmd->len);
+	flush_cache_all();
 
 	ret = smc(cmd_addr);
 	if (ret < 0)
