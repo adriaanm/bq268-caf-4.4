@@ -306,6 +306,8 @@ static struct dentry *dent;
 static struct dentry *dfile_stats;
 
 static struct of_device_id tsens_match[] = {
+	{	.compatible = "qcom,msm8909-tsens",
+	},
 	{	.compatible = "qcom,msm8996-tsens",
 	},
 	{	.compatible = "qcom,msmtitanium-tsens",
