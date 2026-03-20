@@ -270,7 +270,6 @@ static struct wcd_mbhc_register
 
 struct msm8x16_wcd_spmi {
 	struct spmi_device *spmi;
-	struct platform_device *pdev;
 	int base;
 };
 
@@ -6177,7 +6176,6 @@ static int msm8x16_wcd_spmi_probe(struct platform_device *pdev)
 	switch (wcd_resource->start) {
 	case TOMBAK_CORE_0_SPMI_ADDR:
 		msm8x16_wcd_modules[0].spmi = parent_spmi;
-		msm8x16_wcd_modules[0].pdev = pdev;
 		msm8x16_wcd_modules[0].base = (parent_spmi->usid << 16) +
 						wcd_resource->start;
 		wcd9xxx_spmi_set_dev(msm8x16_wcd_modules[0].spmi, 0);
@@ -6186,7 +6184,6 @@ static int msm8x16_wcd_spmi_probe(struct platform_device *pdev)
 		break;
 	case TOMBAK_CORE_1_SPMI_ADDR:
 		msm8x16_wcd_modules[1].spmi = parent_spmi;
-		msm8x16_wcd_modules[1].pdev = pdev;
 		msm8x16_wcd_modules[1].base = (parent_spmi->usid << 16) +
 						wcd_resource->start;
 		wcd9xxx_spmi_set_dev(msm8x16_wcd_modules[1].spmi, 1);
@@ -6264,9 +6261,9 @@ static int msm8x16_wcd_spmi_probe(struct platform_device *pdev)
 	spmi_dev_registered_cnt++;
 register_codec:
 	if ((spmi_dev_registered_cnt == MAX_MSM8X16_WCD_DEVICE) && (!ret)) {
-		if (msm8x16_wcd_modules[0].pdev) {
+		if (msm8x16_wcd_modules[0].spmi) {
 			ret = snd_soc_register_codec(
-					&msm8x16_wcd_modules[0].pdev->dev,
+					&msm8x16_wcd_modules[0].spmi->dev,
 					&soc_codec_dev_msm8x16_wcd,
 					msm8x16_wcd_i2s_dai,
 					ARRAY_SIZE(msm8x16_wcd_i2s_dai));
