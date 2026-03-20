@@ -83,6 +83,7 @@ struct wcd9xxx_spmi_map {
 	int linuxirq[MAX_NUM_IRQS];
 	irq_handler_t handler[MAX_NUM_IRQS];
 	struct spmi_device *spmi[NUM_IRQ_REGS];
+	struct platform_device *pdev[NUM_IRQ_REGS];
 	struct snd_soc_codec *codec;
 
 	enum wcd9xxx_spmi_pm_state pm_state;
@@ -161,8 +162,8 @@ int wcd9xxx_spmi_request_irq(int irq, irq_handler_t handler,
 	unsigned long irq_flags;
 
 	map.linuxirq[irq] =
-		spmi_get_irq_byname(map.spmi[BIT_BYTE(irq)], NULL,
-				    irq_names[irq]);
+		platform_get_irq_byname(map.pdev[BIT_BYTE(irq)],
+					irq_names[irq]);
 
 	if (strcmp(name, "mbhc sw intr"))
 		irq_flags = IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING |
@@ -408,6 +409,12 @@ void wcd9xxx_spmi_set_dev(struct spmi_device *spmi, int i)
 {
 	if (i < NUM_IRQ_REGS)
 		map.spmi[i] = spmi;
+}
+
+void wcd9xxx_spmi_set_pdev(struct platform_device *pdev, int i)
+{
+	if (i < NUM_IRQ_REGS)
+		map.pdev[i] = pdev;
 }
 
 int wcd9xxx_spmi_irq_init(void)
