@@ -26,11 +26,10 @@ echo 0   > $RED   2>/dev/null
 # Dump timer diagnostics to screen
 # Clear screen, show broadcast device + mode (11 lines max)
 echo -e "\033[2J\033[H" > $CON
-echo "BC dev:" > $CON
+echo "BC:" > $CON
 sed -n '/^Broadcast/,/^$/p' /proc/timer_list 2>/dev/null | grep -E 'device:|mode:' > $CON
 echo "Tick0:" > $CON
 sed -n '/^Tick Device: mode/,/^$/p' /proc/timer_list 2>/dev/null | head -3 > $CON
-echo "sleep 1..." > $CON
 sleep 1
 echo "sleep OK!" > $CON
 
