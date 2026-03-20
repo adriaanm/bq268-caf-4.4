@@ -95,20 +95,38 @@ serial cmd timeout="5":
     python3 scripts/serial-cmd.sh "{{cmd}}" "{{timeout}}"
 
 # reboot device into fastboot via serial console
+# Two-hop: 4.4 reboot → lands on 3.18 (boot partition) → 3.18 reboot-bootloader → fastboot
 dev-reboot:
     #!/usr/bin/env bash
-    if [ ! -e "{{serial_tty}}" ]; then
-        echo "No serial device — already in fastboot?"
+    if fastboot devices 2>/dev/null | grep -q .; then
+        echo "Already in fastboot"
         exit 0
     fi
-    echo "Sending reboot-bootloader via serial..."
-    python3 scripts/serial-cmd.sh "reboot-bootloader" "2" || true
-    sleep 3
-    if [ -e "{{serial_tty}}" ]; then
-        echo "WARNING: serial still present, device may not have rebooted"
+    if [ ! -e "{{serial_tty}}" ]; then
+        echo "No serial device and no fastboot — manual intervention needed"
         exit 1
     fi
-    echo "Device rebooting to fastboot..."
+    echo "Rebooting 4.4 → 3.18..."
+    python3 scripts/serial-cmd.sh "/sbin/reboot-bootloader" "2" 2>/dev/null || true
+    sleep 8
+    # Check if we landed in fastboot (unlikely from 4.4, PON not working)
+    if fastboot devices 2>/dev/null | grep -q .; then
+        echo "Fastboot ready (direct)"
+        exit 0
+    fi
+    # We're on 3.18 — wait for its serial, then reboot to fastboot
+    echo "Waiting for 3.18 serial..."
+    for i in $(seq 1 30); do
+        if [ -e "{{serial_tty}}" ]; then sleep 2; break; fi
+        sleep 1
+    done
+    if [ ! -e "{{serial_tty}}" ]; then
+        echo "TIMEOUT: no serial after reboot"
+        exit 1
+    fi
+    echo "Rebooting 3.18 → fastboot..."
+    python3 scripts/serial-cmd.sh "/sbin/reboot-bootloader" "2" 2>/dev/null || true
+    sleep 5
     just wait-fastboot
 
 # ── Iteration cycle ────────────────────────────────────
