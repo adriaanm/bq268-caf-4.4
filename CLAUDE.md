@@ -35,7 +35,7 @@ The device boots our 4.4 kernel via `fastboot boot` (RAM, not flashed). The 3.18
 - **`just cycle`** — build initramfs image → `fastboot boot` → wait for serial → grab dmesg (requires device in fastboot)
 - **`just recycle`** — reboot current device → cycle (fully autonomous, no manual intervention)
 - **`just serial "cmd"`** — run a command on the device via USB serial (`/dev/ttyACM0`)
-- **`just dev-reboot`** — two-hop reboot: 4.4 reboot → 3.18 → reboot-bootloader → fastboot
+- **`just dev-reboot`** — reboot to fastboot via IMEM magic + warm reset (direct, no intermediary)
 
 The serial console is USB ACM via configfs gadget on `ttyGS0` (device) / `ttyACM0` (host). The init script respawns the shell if it exits.
 
