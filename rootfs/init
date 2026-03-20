@@ -86,7 +86,11 @@ if [ -e /dev/ttyGS0 ]; then
         echo ""
     } > /dev/ttyGS0
     export ENV=/etc/profile
-    setsid sh -c 'exec sh </dev/ttyGS0 >/dev/ttyGS0 2>&1' &
+    # Respawn shell forever so quitting screen doesn't kill console
+    while true; do
+        setsid sh -c 'exec sh </dev/ttyGS0 >/dev/ttyGS0 2>&1'
+        sleep 1
+    done &
 else
     echo "no ttyGS0" > $CON
     # Blink green with busywait
