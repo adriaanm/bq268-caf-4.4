@@ -89,9 +89,15 @@ CONFIG_TMPFS=y
 CONFIG_DEVTMPFS=y
 CONFIG_DEVTMPFS_MOUNT=y
 
-# USB disabled for initramfs baseline test
-# CONFIG_USB is not set
-# CONFIG_USB_GADGET is not set
+# USB gadget (configfs ACM for serial console)
+CONFIG_USB=y
+CONFIG_USB_GADGET=y
+CONFIG_USB_GADGET_VBUS_DRAW=500
+CONFIG_USB_CHIPIDEA=y
+CONFIG_USB_CHIPIDEA_UDC=y
+CONFIG_USB_CONFIGFS=y
+CONFIG_USB_CONFIGFS_ACM=y
+CONFIG_USB_MSM_OTG=y
 CONFIG_EXTCON=y
 
 # Regulator
@@ -197,13 +203,11 @@ CONFIG_DEVMEM=y
 # IOMMU
 CONFIG_MSM_IOMMU_V1=y
 
-# Bus scaling (MSM_BUS_SCALING renamed to QCOM_BUS_SCALING in 4.4)
-CONFIG_QCOM_BUS_SCALING=y
-
-# DDR bandwidth monitor — scales BIMC frequency with traffic to prevent brownouts
-CONFIG_QCOM_BIMC_BWMON=y
-CONFIG_DEVFREQ_GOV_QCOM_BW_HWMON=y
-CONFIG_QCOM_DEVFREQ_DEVBW=y
+# Bus scaling — disabled to bisect boot regression
+# CONFIG_QCOM_BUS_SCALING is not set
+# CONFIG_QCOM_BIMC_BWMON is not set
+# CONFIG_DEVFREQ_GOV_QCOM_BW_HWMON is not set
+# CONFIG_QCOM_DEVFREQ_DEVBW is not set
 
 # Reset / SCM / IRQ migration
 CONFIG_RESET_CONTROLLER=y
