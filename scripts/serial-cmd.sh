@@ -10,36 +10,38 @@ TIMEOUT = int(sys.argv[2]) if len(sys.argv) > 2 else 5
 CMD = sys.argv[1] if len(sys.argv) > 1 else 'echo ok'
 
 try:
-    s = serial.Serial(PORT, BAUD, timeout=1)
+    s = serial.Serial(PORT, BAUD, timeout=2)
 except serial.SerialException as e:
     print(f"ERROR: {e}", file=sys.stderr)
     sys.exit(1)
 
-# Drain any buffered output
+# Drain any buffered output and get a clean prompt
 s.reset_input_buffer()
-
-# Send newline to get a clean prompt, then the command
 s.write(b'\n')
 time.sleep(0.2)
-s.reset_input_buffer()  # Discard prompt
+s.read(s.in_waiting)
 
-# Send command with end marker
-marker = '__END_CMD__'
-s.write(f'{CMD}; echo {marker}\n'.encode())
+# Send the command
+s.write((CMD + '\n').encode())
 
-# Read until we see the marker or timeout
-output = []
+# Read output until timeout
+output = b''
 deadline = time.time() + TIMEOUT
 while time.time() < deadline:
-    line = s.readline().decode('utf-8', errors='replace').rstrip('\r\n')
-    if marker in line:
-        break
-    output.append(line)
+    chunk = s.read(s.in_waiting or 1)
+    if chunk:
+        output += chunk
+    else:
+        time.sleep(0.1)
 
 s.close()
 
-# Skip the first line (command echo) if present
-if output and CMD in output[0]:
-    output = output[1:]
+# Decode and strip command echo + trailing prompt
+lines = output.decode('utf-8', errors='replace').splitlines()
+# Skip first line (command echo) and last line (prompt)
+if lines and CMD in lines[0]:
+    lines = lines[1:]
+if lines and lines[-1].startswith('bq268#'):
+    lines = lines[:-1]
 
-print('\n'.join(output))
+print('\n'.join(lines))
