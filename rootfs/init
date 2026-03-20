@@ -1,15 +1,8 @@
 #!/bin/sh
-# Minimal init for CAF 4.4 — test sleep, then USB serial console
+# Minimal init for CAF 4.4 — diagnose sleep hang, then USB serial
 #
-# Boot sequence (watch LEDs):
-#   1. Green on, red off       = init reached, mounts done
-#   2. Red/green alternating   = sleep works! (3 cycles)
-#   3. Green solid             = USB gadget configured, waiting for ttyGS0
-#   4. Red off, green solid    = shell on ttyGS0 ready
-#
-# Failure modes:
-#   - Stuck at step 1 (green on, red off) = sleep hangs
-#   - Green blink after step 3            = ttyGS0 never appeared
+# Dumps diagnostics to fbcon (tty0) before testing sleep.
+# The tiny screen shows the last ~8 lines, so output is minimal.
 
 mount -t proc proc /proc
 mount -t sysfs sys /sys
@@ -22,32 +15,48 @@ mount -t configfs configfs /sys/kernel/config
 
 hostname bq268-caf
 
+CON=/dev/tty0
 GREEN=/sys/class/leds/green/brightness
 RED=/sys/class/leds/red/brightness
 
-# Step 1: init reached — green on, red off
+# Green on, red off = init reached
 echo 255 > $GREEN 2>/dev/null
 echo 0   > $RED   2>/dev/null
 
-# Step 2: test sleep with red/green alternating blink (3 cycles)
-# If sleep hangs, we'll be stuck with green on + red off (step 1).
+# Dump timer diagnostics to screen
+echo "=== BQ268 4.4 init ===" > $CON
+echo "Timer diag:" > $CON
+# Show clockevent devices
+grep -E 'event_handler|active' /proc/timer_list 2>/dev/null | head -4 > $CON
+# Show arch timer interrupts
+echo "IRQs:" > $CON
+grep -i 'arch_timer\|timer' /proc/interrupts 2>/dev/null | head -3 > $CON
+# Show UDC
+echo "UDC: $(ls /sys/class/udc/ 2>/dev/null)" > $CON
+
+# Test sleep — try 1 second
+echo "sleep 1..." > $CON
+sleep 1
+echo "sleep OK!" > $CON
+
+# If we get here, sleep works — red/green blink to confirm
 i=0
-while [ $i -lt 3 ]; do
-    sleep 1
+while [ $i -lt 2 ]; do
     echo 0   > $GREEN 2>/dev/null
     echo 255 > $RED   2>/dev/null
     sleep 1
     echo 255 > $GREEN 2>/dev/null
     echo 0   > $RED   2>/dev/null
+    sleep 1
     i=$((i + 1))
 done
 
-# Step 3: sleep works — set up USB ACM gadget via configfs
+# USB ACM gadget via configfs
 GADGET=/sys/kernel/config/usb_gadget/g1
 
 mkdir -p $GADGET
-echo 0x1d6b > $GADGET/idVendor   # Linux Foundation
-echo 0x0104 > $GADGET/idProduct  # Multifunction Composite Gadget
+echo 0x1d6b > $GADGET/idVendor
+echo 0x0104 > $GADGET/idProduct
 mkdir -p $GADGET/strings/0x409
 echo "BQ268"       > $GADGET/strings/0x409/product
 echo "bq268-caf44" > $GADGET/strings/0x409/serialnumber
@@ -60,22 +69,23 @@ echo 500          > $GADGET/configs/c.1/MaxPower
 mkdir -p $GADGET/functions/acm.usb0
 ln -s $GADGET/functions/acm.usb0 $GADGET/configs/c.1/
 
-# Bind to UDC
 UDC=$(ls /sys/class/udc/ 2>/dev/null | head -1)
 if [ -n "$UDC" ]; then
     echo "$UDC" > $GADGET/UDC
+    echo "Gadget bound: $UDC" > $CON
 fi
 
-# Wait for ttyGS0
+# Wait for ttyGS0 using busywait instead of sleep
 i=0
-while [ ! -e /dev/ttyGS0 ] && [ $i -lt 10 ]; do
-    sleep 1
+while [ ! -e /dev/ttyGS0 ] && [ $i -lt 50 ]; do
+    # ~0.2s busy wait per iteration, 50 iterations = ~10s
+    j=0; while [ $j -lt 2000000 ]; do j=$((j+1)); done
     i=$((i + 1))
 done
 
 if [ -e /dev/ttyGS0 ]; then
-    # Step 4: USB serial ready — red off, green solid
     echo 0 > $RED 2>/dev/null
+    echo "ttyGS0 ready" > $CON
     {
         echo ""
         echo "========================================"
@@ -87,10 +97,13 @@ if [ -e /dev/ttyGS0 ]; then
     export ENV=/etc/profile
     setsid sh -c 'exec sh </dev/ttyGS0 >/dev/ttyGS0 2>&1' &
 else
-    # Blink green = ttyGS0 failed
+    echo "no ttyGS0" > $CON
+    # Blink green with busywait
     while true; do
-        echo 0   > $GREEN 2>/dev/null; sleep 1
-        echo 255 > $GREEN 2>/dev/null; sleep 1
+        echo 0 > $GREEN 2>/dev/null
+        j=0; while [ $j -lt 5000000 ]; do j=$((j+1)); done
+        echo 255 > $GREEN 2>/dev/null
+        j=0; while [ $j -lt 5000000 ]; do j=$((j+1)); done
     done
 fi
 
