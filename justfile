@@ -65,7 +65,7 @@ flash:
 wait-serial:
     #!/usr/bin/env bash
     echo "Waiting for {{serial_tty}}..."
-    for i in $(seq 1 30); do
+    for i in $(seq 1 120); do
         if [ -e "{{serial_tty}}" ]; then
             sleep 2
             echo "Serial console ready on {{serial_tty}}"
