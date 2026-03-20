@@ -1023,7 +1023,7 @@
 		qcom,wcnss-adc_tm = <&pm8909_adc_tm>;
 	};
 
-	usb_otg: usb@78d9000 {
+	usb_otg: phy@78d9000 {
 		compatible = "qcom,usb-otg-snps";
 		reg = <0x78d9000 0x400>, <0x6c000 0x200>;
 		reg-names = "core", "phy_csr";
@@ -1069,6 +1069,16 @@
 		qcom,bus-clk-rate = <400000000 200000000 100000000>;
 		qcom,max-nominal-sysclk-rate = <100000000>;
 		qcom,boost-sysclk-with-streaming;
+		status = "disabled";
+	};
+
+	usb_dev: usb@78d9000 {
+		compatible = "qcom,ci-hdrc";
+		reg = <0x78d9000 0x400>;
+		dr_mode = "peripheral";
+		interrupts = <0 134 0>;
+		usb-phy = <&usb_otg>;
+		status = "disabled";
 	};
 
 	android_usb: android_usb@086000c8 {

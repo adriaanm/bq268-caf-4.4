@@ -264,7 +264,10 @@ static int msm_phy_notify_disconnect(struct usb_phy *phy,
 
 static int msm_otg_link_clk_reset(struct msm_otg *motg, bool assert)
 {
-	int ret;
+	int ret = 0;
+
+	if (!motg->link_rst)
+		return 0;
 
 	if (assert)
 		ret = reset_control_assert(motg->link_rst);
@@ -1297,6 +1300,16 @@ static irqreturn_t msm_otg_irq(int irq, void *data)
 	if (!(otgsc & (OTGSC_IDIS | OTGSC_BSVIS)))
 		return IRQ_NONE;
 
+	/*
+	 * When chipidea (ci_hdrc_msm) manages the controller, the OTG
+	 * state machine is never started and stays in UNDEFINED.  Don't
+	 * handle BSV/ID interrupts here — let ci_irq do it.  Clearing
+	 * BSVIS would hide the VBUS change from chipidea, and scheduling
+	 * sm_work from UNDEFINED state resets the controller mid-flight.
+	 */
+	if (phy->otg->state == OTG_STATE_UNDEFINED)
+		return IRQ_NONE;
+
 	if ((otgsc & OTGSC_IDIS) && (otgsc & OTGSC_IDIE)) {
 		if (otgsc & OTGSC_ID)
 			set_bit(ID, &motg->inputs);
@@ -1523,7 +1536,7 @@ static int msm_otg_read_dt(struct platform_device *pdev, struct msm_otg *motg)
 
 	motg->link_rst = devm_reset_control_get(&pdev->dev, "link");
 	if (IS_ERR(motg->link_rst))
-		return PTR_ERR(motg->link_rst);
+		motg->link_rst = NULL;
 
 	motg->phy_rst = devm_reset_control_get(&pdev->dev, "phy");
 	if (IS_ERR(motg->phy_rst))

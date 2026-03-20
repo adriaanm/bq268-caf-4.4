@@ -98,6 +98,12 @@ void ci_handle_vbus_change(struct ci_hdrc *ci)
 	if (!ci->is_otg)
 		return;
 
+	if (ci->platdata->dr_mode == USB_DR_MODE_PERIPHERAL) {
+		/* Device-only: assume VBUS present (PHY may not report BSV) */
+		usb_gadget_vbus_connect(&ci->gadget);
+		return;
+	}
+
 	if (hw_read_otgsc(ci, OTGSC_BSV))
 		usb_gadget_vbus_connect(&ci->gadget);
 	else

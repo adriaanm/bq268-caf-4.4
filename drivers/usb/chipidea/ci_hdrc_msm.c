@@ -9,6 +9,7 @@
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/usb/msm_hsusb_hw.h>
+#include <linux/usb/msm_hsusb.h>
 #include <linux/usb/ulpi.h>
 #include <linux/usb/gadget.h>
 #include <linux/usb/chipidea.h>
@@ -56,26 +57,25 @@ static int ci_hdrc_msm_probe(struct platform_device *pdev)
 	struct platform_device *plat_ci;
 	struct usb_phy *phy;
 
-	dev_dbg(&pdev->dev, "ci_hdrc_msm_probe\n");
-
-	/*
-	 * OTG(PHY) driver takes care of PHY initialization, clock management,
-	 * powering up VBUS, mapping of registers address space and power
-	 * management.
-	 */
 	phy = devm_usb_get_phy_by_phandle(&pdev->dev, "usb-phy", 0);
 	if (IS_ERR(phy))
 		return PTR_ERR(phy);
 
 	ci_hdrc_msm_platdata.usb_phy = phy;
 
+	/* Keep PHY out of low-power mode so hw_device_init can read regs */
+	usb_phy_set_suspend(phy, 0);
+
 	plat_ci = ci_hdrc_add_device(&pdev->dev,
 				pdev->resource, pdev->num_resources,
 				&ci_hdrc_msm_platdata);
 	if (IS_ERR(plat_ci)) {
-		dev_err(&pdev->dev, "ci_hdrc_add_device failed!\n");
+		dev_err(&pdev->dev, "ci_hdrc_add_device failed: %ld\n",
+			PTR_ERR(plat_ci));
 		return PTR_ERR(plat_ci);
 	}
+
+	dev_info(&pdev->dev, "ci_hdrc_msm probe OK\n");
 
 	platform_set_drvdata(pdev, plat_ci);
 
@@ -115,3 +115,32 @@ module_platform_driver(ci_hdrc_msm_driver);
 MODULE_ALIAS("platform:msm_hsusb");
 MODULE_ALIAS("platform:ci13xxx_msm");
 MODULE_LICENSE("GPL v2");
+
+/*
+ * Late diagnostic — print USB subsystem state after boot settles.
+ */
+static int __init bq268_usb_diag(void)
+{
+	struct usb_phy *phy;
+
+	phy = usb_get_phy(USB_PHY_TYPE_USB2);
+	if (IS_ERR(phy)) {
+		pr_err("BQ268 USB: no PHY registered\n");
+	} else {
+		struct msm_otg *motg;
+		u32 otgsc;
+
+		motg = container_of(phy, struct msm_otg, phy);
+		otgsc = readl(motg->regs + 0x01A4);
+
+		pr_err("BQ268 USB: OTG=%s OTGSC=%08x\n",
+		       usb_otg_state_string(phy->otg->state), otgsc);
+		pr_err("  BSV=%d BSVIE=%d ID=%d IDIE=%d\n",
+		       !!(otgsc & BIT(11)), !!(otgsc & BIT(27)),
+		       !!(otgsc & BIT(8)),  !!(otgsc & BIT(24)));
+		usb_put_phy(phy);
+	}
+
+	return 0;
+}
+late_initcall(bq268_usb_diag);

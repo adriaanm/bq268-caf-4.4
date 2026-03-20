@@ -39,6 +39,13 @@ bootimg-assemble:
 # full build: kernel + boot.img (no initramfs)
 bootimg: build bootimg-assemble
 
+# boot.img with USB-test initramfs (echo shell on ttyGS0)
+bootimg-usb-test: build
+    cat {{out}}/zImage {{out}}/msm8909-bq268.dtb > {{out}}/zImage-dtb
+    python3 {{mkbootimg}} {{out}}/zImage-dtb tools/usb-test-init/initramfs.cpio.gz /dev/null {{out}}/boot.img "androidboot.hardware=qcom earlyprintk panic=5 console=tty0 console=ttyGS0 consoleblank=0 loglevel=7"
+    cp {{out}}/boot.img {{out}}/boot-usb-test.img
+    @ls -lh {{out}}/boot-usb-test.img
+
 # build with GCC 4.9 (explicit)
 bootimg-gcc: bootimg
 
