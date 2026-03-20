@@ -3135,7 +3135,9 @@ parse_mclk_freq:
 	num_strings = of_property_count_strings(pdev->dev.of_node,
 			wsa);
 	if (num_strings > 0) {
-		if (wsa881x_get_probing_count() < 2) {
+		if (!IS_ENABLED(CONFIG_SND_SOC_WSA881X)) {
+			/* WSA881x not compiled — skip external speaker amp */
+		} else if (wsa881x_get_probing_count() < 2) {
 			ret = -EPROBE_DEFER;
 			goto err;
 		} else if (wsa881x_get_presence_count() == num_strings) {
@@ -3194,7 +3196,9 @@ parse_mclk_freq:
 						__func__, ret);
 				goto err;
 			}
-			wsa881x_set_mclk_callback(msm8952_enable_wsa_mclk);
+			if (IS_ENABLED(CONFIG_SND_SOC_WSA881X))
+				wsa881x_set_mclk_callback(
+					msm8952_enable_wsa_mclk);
 			/* update the internal speaker boost usage */
 			msm8x16_update_int_spk_boost(false);
 		}
