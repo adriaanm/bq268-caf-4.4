@@ -25,12 +25,19 @@ echo 0   > $RED   2>/dev/null
 
 # Dump timer diagnostics to screen
 echo "=== BQ268 4.4 init ===" > $CON
-echo "Timer diag:" > $CON
-# Show clockevent devices
-grep -E 'event_handler|active' /proc/timer_list 2>/dev/null | head -4 > $CON
+
+# Dump broadcast device state from timer_list
+echo "Broadcast:" > $CON
+grep -A2 'Broadcast' /proc/timer_list 2>/dev/null | head -3 > $CON
+
+# Show tick device mode
+echo "Tick dev:" > $CON
+grep -B1 'mode:' /proc/timer_list 2>/dev/null | grep -E 'mode:|Tick' | head -4 > $CON
+
 # Show arch timer interrupts
 echo "IRQs:" > $CON
-grep -i 'arch_timer\|timer' /proc/interrupts 2>/dev/null | head -3 > $CON
+grep -i 'arch.*timer\|Timer broadcast' /proc/interrupts 2>/dev/null | head -3 > $CON
+
 # Show UDC
 echo "UDC: $(ls /sys/class/udc/ 2>/dev/null)" > $CON
 
