@@ -50,6 +50,12 @@ done
 cp "$ROOT_DIR/rootfs/init" "$INITRAMFS/init"
 chmod 755 "$INITRAMFS/init"
 
+# reboot-bootloader (pre-compiled static binary from 3.18)
+if [ -f "$ROOT_DIR/tools/reboot-bootloader" ]; then
+    cp "$ROOT_DIR/tools/reboot-bootloader" "$INITRAMFS/sbin/reboot-bootloader"
+    chmod 755 "$INITRAMFS/sbin/reboot-bootloader"
+fi
+
 # /etc/profile
 cat > "$INITRAMFS/etc/profile" << 'PROF'
 export PATH=/bin:/sbin:/usr/bin:/usr/sbin

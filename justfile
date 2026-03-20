@@ -92,7 +92,7 @@ wait-fastboot:
 
 # send command to device serial console, capture output
 serial cmd timeout="5":
-    bash scripts/serial-cmd.sh "{{cmd}}" "{{timeout}}"
+    python3 scripts/serial-cmd.sh "{{cmd}}" "{{timeout}}"
 
 # reboot device into fastboot via serial console
 dev-reboot:
@@ -101,9 +101,8 @@ dev-reboot:
         echo "No serial device — already in fastboot?"
         exit 0
     fi
-    stty -F "{{serial_tty}}" 115200 raw -echo -echoe -echok
-    echo "Sending reboot-bootloader..."
-    printf 'reboot-bootloader\n' > "{{serial_tty}}"
+    echo "Sending reboot-bootloader via serial..."
+    python3 scripts/serial-cmd.sh "reboot-bootloader" "2" || true
     sleep 3
     if [ -e "{{serial_tty}}" ]; then
         echo "WARNING: serial still present, device may not have rebooted"
@@ -114,17 +113,17 @@ dev-reboot:
 
 # ── Iteration cycle ────────────────────────────────────
 
-# full cycle: build → boot → wait for serial → grab dmesg
-cycle: bootimg
+# full cycle: build initramfs → boot → wait for serial → grab dmesg
+cycle: bootimg-initramfs
     #!/usr/bin/env bash
     echo "=== Booting device ==="
-    just boot
+    fastboot boot {{out}}/boot-initramfs.img
     just wait-serial
     echo "=== Device booted, grabbing dmesg ==="
     just serial "dmesg" "15" | tee {{out}}/dmesg-$(git rev-parse --short HEAD).txt
     echo "=== dmesg saved to {{out}}/dmesg-$(git rev-parse --short HEAD).txt ==="
 
-# reboot device and start a new cycle
+# reboot device, rebuild, boot, grab dmesg
 recycle:
     just dev-reboot
     just cycle
