@@ -10,11 +10,13 @@
  * GNU General Public License for more details.
  */
 
+#include <dt-bindings/spmi/spmi.h>
+
 &spmi_bus {
 
 	qcom,pm8909@0 {
-		spmi-slave-container;
-		reg = <0x0>;
+		compatible = "qcom,pm8909";
+		reg = <0x0 SPMI_USID>;
 		#address-cells = <1>;
 		#size-cells = <1>;
 
@@ -319,8 +321,8 @@
 	};
 
 	qcom,pm8909@1 {
-		spmi-slave-container;
-		reg = <0x1>;
+		compatible = "qcom,pm8909";
+		reg = <0x1 SPMI_USID>;
 		#address-cells = <1>;
 		#size-cells = <1>;
 
