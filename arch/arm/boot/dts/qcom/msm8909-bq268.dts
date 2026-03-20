@@ -813,17 +813,7 @@
 
 &soc {
 	qcom,lpm-levels {
-		qcom,pm-cluster@0 {
-			qcom,pm-cpu {
-				/delete-node/ qcom,pm-cpu-level@1;
-				/delete-node/ qcom,pm-cpu-level@2;
-			};
-
-			/* L2 levels that require min-child-idx > 0 are now
-			 * unreachable — delete to avoid lpm-levels errors */
-			/delete-node/ qcom,pm-cluster-level@1;
-			/delete-node/ qcom,pm-cluster-level@2;
-		};
+		status = "disabled";
 	};
 };
 
