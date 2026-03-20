@@ -1126,8 +1126,9 @@
 			<0x200a000 0x2100>;
 		reg-names = "core", "chnls", "obsrvr", "intr", "cnfg";
 		interrupts = <0 190 0>;
-		qcom,pmic-arb-channel = <0>;
-		qcom,pmic-arb-ee = <0>;
+		interrupt-names = "periph_irq";
+		qcom,channel = <0>;
+		qcom,ee = <0>;
 		#interrupt-cells = <3>;
 		interrupt-controller;
 		#address-cells = <2>;
