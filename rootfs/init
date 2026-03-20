@@ -1,8 +1,15 @@
 #!/bin/sh
-# Minimal init for CAF 4.4 — USB serial console via configfs gadget
-# Green LED solid = init reached
-# Red LED off = USB serial ready
-# Green blink = USB setup failed (fallback)
+# Minimal init for CAF 4.4 — test sleep, then USB serial console
+#
+# Boot sequence (watch LEDs):
+#   1. Green on, red off       = init reached, mounts done
+#   2. Red/green alternating   = sleep works! (3 cycles)
+#   3. Green solid             = USB gadget configured, waiting for ttyGS0
+#   4. Red off, green solid    = shell on ttyGS0 ready
+#
+# Failure modes:
+#   - Stuck at step 1 (green on, red off) = sleep hangs
+#   - Green blink after step 3            = ttyGS0 never appeared
 
 mount -t proc proc /proc
 mount -t sysfs sys /sys
@@ -15,11 +22,27 @@ mount -t configfs configfs /sys/kernel/config
 
 hostname bq268-caf
 
-# Green on = init reached
-echo 255 > /sys/class/leds/green/brightness 2>/dev/null
+GREEN=/sys/class/leds/green/brightness
+RED=/sys/class/leds/red/brightness
 
-# --- USB ACM gadget via configfs ---
-# (4.4 removed USB_G_ANDROID; uses configfs instead)
+# Step 1: init reached — green on, red off
+echo 255 > $GREEN 2>/dev/null
+echo 0   > $RED   2>/dev/null
+
+# Step 2: test sleep with red/green alternating blink (3 cycles)
+# If sleep hangs, we'll be stuck with green on + red off (step 1).
+i=0
+while [ $i -lt 3 ]; do
+    sleep 1
+    echo 0   > $GREEN 2>/dev/null
+    echo 255 > $RED   2>/dev/null
+    sleep 1
+    echo 255 > $GREEN 2>/dev/null
+    echo 0   > $RED   2>/dev/null
+    i=$((i + 1))
+done
+
+# Step 3: sleep works — set up USB ACM gadget via configfs
 GADGET=/sys/kernel/config/usb_gadget/g1
 
 mkdir -p $GADGET
@@ -51,8 +74,8 @@ while [ ! -e /dev/ttyGS0 ] && [ $i -lt 10 ]; do
 done
 
 if [ -e /dev/ttyGS0 ]; then
-    # Red off = USB serial ready
-    echo 0 > /sys/class/leds/red/brightness 2>/dev/null
+    # Step 4: USB serial ready — red off, green solid
+    echo 0 > $RED 2>/dev/null
     {
         echo ""
         echo "========================================"
@@ -66,8 +89,8 @@ if [ -e /dev/ttyGS0 ]; then
 else
     # Blink green = ttyGS0 failed
     while true; do
-        echo 0   > /sys/class/leds/green/brightness 2>/dev/null; sleep 1
-        echo 255 > /sys/class/leds/green/brightness 2>/dev/null; sleep 1
+        echo 0   > $GREEN 2>/dev/null; sleep 1
+        echo 255 > $GREEN 2>/dev/null; sleep 1
     done
 fi
 
