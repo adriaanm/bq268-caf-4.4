@@ -51,8 +51,8 @@ cp "$ROOT_DIR/rootfs/init" "$INITRAMFS/init"
 chmod 755 "$INITRAMFS/init"
 
 # reboot-bootloader (pre-compiled static binary from 3.18)
-if [ -f "$ROOT_DIR/tools/reboot-bootloader" ]; then
-    cp "$ROOT_DIR/tools/reboot-bootloader" "$INITRAMFS/sbin/reboot-bootloader"
+if [ -f "$ROOT_DIR/tools/reboot-bootloader/reboot-bootloader" ]; then
+    cp "$ROOT_DIR/tools/reboot-bootloader/reboot-bootloader" "$INITRAMFS/sbin/reboot-bootloader"
     chmod 755 "$INITRAMFS/sbin/reboot-bootloader"
 fi
 
