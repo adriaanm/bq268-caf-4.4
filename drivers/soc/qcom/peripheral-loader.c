@@ -659,6 +659,8 @@ static int pil_load_seg(struct pil_desc *desc, struct pil_seg *seg)
 	if (seg->filesz) {
 		snprintf(fw_name, ARRAY_SIZE(fw_name), "%s.b%02d",
 				desc->fw_name, num);
+		pr_err("pil_load_seg: [%s] loading %s (%lu bytes)\n",
+		       desc->name, fw_name, seg->filesz);
 		ret = request_firmware_into_buf(fw_name, desc->dev, seg->paddr,
 					      seg->filesz, desc->map_fw_mem,
 					      desc->unmap_fw_mem, map_data);
