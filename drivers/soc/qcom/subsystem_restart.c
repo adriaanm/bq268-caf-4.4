@@ -796,7 +796,7 @@ void *__subsystem_get(const char *name, const char *fw_name)
 	subsys = retval = find_subsys(name);
 	if (!subsys)
 		return ERR_PTR(-ENODEV);
-	if (!try_module_get(subsys->owner)) {
+	if (subsys->owner && !try_module_get(subsys->owner)) {
 		retval = ERR_PTR(-ENODEV);
 		goto err_module;
 	}
@@ -828,7 +828,8 @@ err_start:
 	mutex_unlock(&track->lock);
 	subsystem_put(subsys_d);
 err_depends:
-	module_put(subsys->owner);
+	if (subsys->owner)
+		module_put(subsys->owner);
 err_module:
 	put_device(&subsys->dev);
 	return retval;
@@ -898,7 +899,8 @@ void subsystem_put(void *subsystem)
 		subsystem_put(subsys_d);
 		put_device(&subsys_d->dev);
 	}
-	module_put(subsys->owner);
+	if (subsys->owner)
+		module_put(subsys->owner);
 	put_device(&subsys->dev);
 	return;
 err_out:
@@ -1047,7 +1049,7 @@ int subsystem_restart_dev(struct subsys_device *dev)
 	if (!get_device(&dev->dev))
 		return -ENODEV;
 
-	if (!try_module_get(dev->owner)) {
+	if (dev->owner && !try_module_get(dev->owner)) {
 		put_device(&dev->dev);
 		return -ENODEV;
 	}
@@ -1087,7 +1089,8 @@ int subsystem_restart_dev(struct subsys_device *dev)
 		panic("subsys-restart: Unknown restart level!\n");
 		break;
 	}
-	module_put(dev->owner);
+	if (dev->owner)
+		module_put(dev->owner);
 	put_device(&dev->dev);
 
 	return 0;
