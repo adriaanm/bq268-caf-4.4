@@ -169,12 +169,19 @@ out_acc:
 	return ret;
 }
 
+/*
+ * MSM8909 secondary CPU release sequence, ported from 3.18
+ * arch/arm/mach-msm/platsmp.c:arm_release_secondary().
+ *
+ * The generic kpssv2 sequence (multi-step BHS/LDO + L2 SAW) does not
+ * work on MSM8909 — the register bit patterns differ from the standard
+ * KPSS v2 spec.  The 3.18 OEM kernel uses this custom sequence which
+ * manipulates CORE_RST (bit 4) and an undocumented bit 17.
+ */
 static int kpssv2_release_secondary(unsigned int cpu)
 {
 	void __iomem *reg;
-	struct device_node *cpu_node, *l2_node, *acc_node, *saw_node;
-	void __iomem *l2_saw_base;
-	unsigned reg_val;
+	struct device_node *cpu_node, *acc_node;
 	int ret;
 
 	cpu_node = of_get_cpu_node(cpu, NULL);
@@ -187,81 +194,41 @@ static int kpssv2_release_secondary(unsigned int cpu)
 		goto out_acc;
 	}
 
-	l2_node = of_parse_phandle(cpu_node, "next-level-cache", 0);
-	if (!l2_node) {
-		ret = -ENODEV;
-		goto out_l2;
-	}
-
-	saw_node = of_parse_phandle(l2_node, "qcom,saw", 0);
-	if (!saw_node) {
-		ret = -ENODEV;
-		goto out_saw;
-	}
-
 	reg = of_iomap(acc_node, 0);
 	if (!reg) {
 		ret = -ENOMEM;
 		goto out_map;
 	}
 
-	l2_saw_base = of_iomap(saw_node, 0);
-	if (!l2_saw_base) {
-		ret = -ENOMEM;
-		goto out_saw_map;
-	}
-
-	/* Turn on the BHS, turn off LDO Bypass and power down LDO */
-	reg_val = (64 << BHS_CNT_SHIFT) | (0x3f << LDO_PWR_DWN_SHIFT) | BHS_EN;
-	writel_relaxed(reg_val, reg + APC_PWR_GATE_CTL);
+	/* Sequence from 3.18 arm_release_secondary (MSM8909-specific) */
+	writel_relaxed(0x00000033, reg + APCS_CPU_PWR_CTL);
 	mb();
-	/* wait for the BHS to settle */
-	udelay(1);
 
-	/* Turn on BHS segments */
-	reg_val |= 0x3f << BHS_SEG_SHIFT;
-	writel_relaxed(reg_val, reg + APC_PWR_GATE_CTL);
-	mb();
-	 /* wait for the BHS to settle */
-	udelay(1);
-
-	/* Finally turn on the bypass so that BHS supplies power */
-	reg_val |= 0x3f << LDO_BYP_SHIFT;
-	writel_relaxed(reg_val, reg + APC_PWR_GATE_CTL);
-
-	/* enable max phases */
-	writel_relaxed(0x10003, l2_saw_base + APCS_SAW2_2_VCTL);
-	mb();
-	udelay(50);
-
-	reg_val = COREPOR_RST | CLAMP;
-	writel_relaxed(reg_val, reg + APCS_CPU_PWR_CTL);
+	writel_relaxed(0x10000001, reg + APC_PWR_GATE_CTL);
 	mb();
 	udelay(2);
 
-	reg_val &= ~CLAMP;
-	writel_relaxed(reg_val, reg + APCS_CPU_PWR_CTL);
+	writel_relaxed(0x00000031, reg + APCS_CPU_PWR_CTL);
+	mb();
+
+	writel_relaxed(0x00000039, reg + APCS_CPU_PWR_CTL);
 	mb();
 	udelay(2);
 
-	reg_val &= ~COREPOR_RST;
-	writel_relaxed(reg_val, reg + APCS_CPU_PWR_CTL);
+	writel_relaxed(0x00020038, reg + APCS_CPU_PWR_CTL);
+	mb();
+	udelay(2);
+
+	writel_relaxed(0x00020008, reg + APCS_CPU_PWR_CTL);
 	mb();
 
-	reg_val |= CORE_PWRD_UP;
-	writel_relaxed(reg_val, reg + APCS_CPU_PWR_CTL);
+	writel_relaxed(0x00020088, reg + APCS_CPU_PWR_CTL);
 	mb();
 
 	ret = 0;
 
-	iounmap(l2_saw_base);
-out_saw_map:
 	iounmap(reg);
 out_map:
-	of_node_put(saw_node);
-out_saw:
-	of_node_put(l2_node);
-out_l2:
 	of_node_put(acc_node);
 out_acc:
 	of_node_put(cpu_node);
