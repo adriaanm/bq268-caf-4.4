@@ -686,8 +686,11 @@ notif_register:
 
 	rc = qmi_svc_event_notifier_register(SSCTL_SERVICE_ID, SSCTL_VER_2,
 					data->instance_id, &data->notifier);
-	if (rc < 0)
-		pr_err("Notifier register failed for %s\n", data->name);
+	if (rc < 0) {
+		pr_err("Notifier register failed for %s (rc=%d), continuing\n",
+			data->name, rc);
+		rc = 0;
+	}
 add_list:
 	INIT_LIST_HEAD(&data->list);
 	list_add_tail(&data->list, &sysmon_list);
