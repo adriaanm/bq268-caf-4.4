@@ -286,31 +286,27 @@ static int kpssv2_boot_secondary(unsigned int cpu, struct task_struct *idle)
 	return qcom_boot_secondary(cpu, kpssv2_release_secondary);
 }
 
-static int cold_boot_flags[] __initdata = {
-	0,
-	SCM_FLAG_COLDBOOT_CPU1,
-	SCM_FLAG_COLDBOOT_CPU2,
-	SCM_FLAG_COLDBOOT_CPU3,
-};
-
 static void __init qcom_smp_prepare_cpus(unsigned int max_cpus)
 {
 	int cpu, map;
-	unsigned int flags = 0;
+	u32 aff0_mask = 0, aff1_mask = 0, aff2_mask = 0;
 
 	for_each_present_cpu(cpu) {
 		map = cpu_logical_map(cpu);
-		if (map < ARRAY_SIZE(cold_boot_flags))
-			flags |= cold_boot_flags[map];
+		aff0_mask |= BIT(MPIDR_AFFINITY_LEVEL(map, 0));
+		aff1_mask |= BIT(MPIDR_AFFINITY_LEVEL(map, 1));
+		aff2_mask |= BIT(MPIDR_AFFINITY_LEVEL(map, 2));
 	}
 
 	/*
-	 * Use register-based atomic SCM call — the buffer-based scm_call()
-	 * returns -1 from TZ on this firmware, possibly due to memory
-	 * protection or buffer format differences between 3.18 and 4.4.
+	 * MSM8909 TZ only supports the multi-cluster boot API
+	 * (SCM_BOOT_ADDR_MC = 0x11), not the legacy SCM_BOOT_ADDR = 0x1.
+	 * The 3.18 kernel detects this via scm_is_mc_boot_available() and
+	 * uses scm_set_boot_addr_mc(). Match that behavior.
 	 */
-	if (scm_call_atomic2(SCM_SVC_BOOT, SCM_BOOT_ADDR,
-			     flags, virt_to_phys(secondary_startup_arm))) {
+	if (scm_set_boot_addr_mc(virt_to_phys(secondary_startup_arm),
+				 aff0_mask, aff1_mask, aff2_mask,
+				 SCM_FLAG_COLDBOOT_MC)) {
 		for_each_present_cpu(cpu) {
 			if (cpu == smp_processor_id())
 				continue;
