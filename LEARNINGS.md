@@ -85,17 +85,19 @@ On 3.18, without `arch_setup_dma_ops`, the dummy device falls through to the def
 
 **Fix**: Remove the `arch_setup_dma_ops()` call. Just set `coherent_dma_mask` like 3.18.
 
-### Auth poll hang (workaround, needs SMP fix)
+### Auth poll hang (fixed with SMP)
 
-`pil_msa_mba_auth()` uses `readl_poll_timeout()` to wait for `STATUS_AUTH_COMPLETE`. This macro calls `usleep_range()` internally, which relies on hrtimers. On a single CPU, the auth takes ~5s, and during that time no timer interrupts are processed → `usleep_range` never wakes → hang.
+`pil_msa_mba_auth()` uses `readl_poll_timeout()` to wait for `STATUS_AUTH_COMPLETE`. With SMP working, a `mdelay(1) + cond_resched()` poll loop works (5.3s to complete). The auth succeeds with `status=4, ret=0`.
 
-**Workaround**: Replaced with `mdelay(1) + cond_resched()` loop. Still hangs on single core because `mdelay` burns the only CPU. With SMP working (4 cores), this should be survivable — the kworker polls on one core while others keep the system alive.
+### err_ready wait (fixed with SMP)
 
-### err_ready wait (workaround, needs SMP fix)
+After `pil_boot` completes, `subsystem_restart.c` calls `wait_for_err_ready()`. With SMP, the SMP2P err_ready signal arrives ~1s after modem reset. Made timeout non-fatal (warn instead of panic) for robustness.
 
-After `pil_boot` completes, `subsystem_restart.c` calls `wait_for_completion_timeout(&err_ready, 10s)`. This also relies on timer interrupts. On failure it **panics**.
+### Modem Q6 watchdog — stalled initialization (open)
 
-**Workaround**: Skip the wait entirely (return 0). The modem boots and the err_ready GPIO should eventually fire via SMP2P, but the completion wait can't work without timers on a single core.
+After successful PIL boot + auth, the modem Q6 starts running but its internal watchdog fires after ~40s: `dog.c:1522:Watchdog detects stalled initialization`. The Q6 DSP can't complete init — likely waiting for AP-side resources (RPM votes, SMD channels, bus bandwidth). `apr_register: Modem is not Up` confirms SMD/APR link never establishes.
+
+**Investigation**: Compare modem subsystem DTS, RPM, SMD, and bus scaling setup between 3.18 and 4.4. Check if `QCOM_BUS_SCALING` (currently disabled due to crash) is required for modem.
 
 ### Modem firmware location
 
