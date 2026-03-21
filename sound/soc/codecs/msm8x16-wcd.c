@@ -1182,7 +1182,7 @@ static int __msm8x16_wcd_reg_read(struct snd_soc_codec *codec,
 						&pdata->digital_cdc_core_clk);
 			}
 			if (ret < 0) {
-				pr_err_ratelimited("failed to enable the MCLK\n");
+				pr_err("failed to enable the MCLK\n");
 				goto err;
 			}
 			pr_debug("enabled digital codec core clk\n");
@@ -1239,7 +1239,7 @@ static int __msm8x16_wcd_reg_write(struct snd_soc_codec *codec,
 						&pdata->digital_cdc_core_clk);
 			}
 			if (ret < 0) {
-				pr_err_ratelimited("failed to enable the MCLK\n");
+				pr_err("failed to enable the MCLK\n");
 				ret = 0;
 				goto err;
 			}

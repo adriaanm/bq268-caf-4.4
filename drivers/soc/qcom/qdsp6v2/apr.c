@@ -467,7 +467,7 @@ struct apr_svc *apr_register(char *dest, char *svc_name, apr_fn svc_fn,
 			pr_debug("%s: Wait for modem to bootup\n", __func__);
 			rc = apr_wait_for_device_up(APR_DEST_MODEM);
 			if (rc == 0) {
-				pr_err_ratelimited("%s: Modem is not Up\n", __func__);
+				pr_err("%s: Modem is not Up\n", __func__);
 				return NULL;
 			}
 		}
