@@ -837,11 +837,10 @@ static int pil_msa_mba_auth(struct pil_desc *pil)
 	u64 val = is_timeout_disabled() ? 0 : modem_auth_timeout_ms * 1000;
 
 	/* Wait for all segments to be authenticated or an error to occur */
-	/*
-	 * Use a manual jiffies+udelay loop instead of readl_poll_timeout
-	 * because usleep_range (hrtimer) hangs on MSM8909 when modem Q6
-	 * boot disrupts timer interrupt delivery.
-	 */
+	// FIXME: readl_poll_timeout uses usleep_range (hrtimer) which hangs
+	// on MSM8909 when modem Q6 boot disrupts timer interrupt delivery.
+	// Using manual jiffies+udelay loop as workaround. Fix the root cause:
+	// arch_timer interrupt dies after Q6 power-up.
 	pr_err("pil_msa_mba_auth: polling for auth complete (timeout=%llu us)\n",
 	       val);
 	{
