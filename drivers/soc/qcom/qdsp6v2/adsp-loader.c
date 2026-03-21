@@ -96,12 +96,14 @@ static void adsp_loader_do(struct platform_device *pdev)
 				goto fail;
 			}
 
+			pr_err("adsp_load_fw: calling subsystem_get(\"modem\")\n");
 			priv->pil_h = subsystem_get("modem");
 			if (IS_ERR(priv->pil_h)) {
 				dev_err(&pdev->dev, "%s: pil get failed,\n",
 					__func__);
 				goto fail;
 			}
+			pr_err("adsp_load_fw: subsystem_get(\"modem\") succeeded\n");
 
 			/* Set the state of the ADSP in APR driver */
 			apr_set_modem_state(APR_SUBSYS_LOADED);

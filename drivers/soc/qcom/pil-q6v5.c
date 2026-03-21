@@ -96,24 +96,28 @@ int pil_q6v5_make_proxy_votes(struct pil_desc *pil)
 		return ret;
 	}
 
+	pr_err("pil_q6v5_make_proxy_votes: enabling xo\n");
 	ret = clk_prepare_enable(drv->xo);
 	if (ret) {
 		dev_err(pil->dev, "Failed to vote for XO(rc:%d)\n", ret);
 		goto out;
 	}
 
+	pr_err("pil_q6v5_make_proxy_votes: enabling pnoc\n");
 	ret = clk_prepare_enable(drv->pnoc_clk);
 	if (ret) {
 		dev_err(pil->dev, "Failed to vote for pnoc(rc:%d)\n", ret);
 		goto err_pnoc_vote;
 	}
 
+	pr_err("pil_q6v5_make_proxy_votes: enabling qdss\n");
 	ret = clk_prepare_enable(drv->qdss_clk);
 	if (ret) {
 		dev_err(pil->dev, "Failed to vote for qdss(rc:%d)\n", ret);
 		goto err_qdss_vote;
 	}
 
+	pr_err("pil_q6v5_make_proxy_votes: set vdd_cx voltage %d\n", uv);
 	ret = regulator_set_voltage(drv->vreg_cx, uv, INT_MAX);
 	if (ret) {
 		dev_err(pil->dev, "Failed to request vdd_cx voltage(rc:%d)\n",
@@ -127,6 +131,7 @@ int pil_q6v5_make_proxy_votes(struct pil_desc *pil)
 		goto err_cx_mode;
 	}
 
+	pr_err("pil_q6v5_make_proxy_votes: enable vdd_cx\n");
 	ret = regulator_enable(drv->vreg_cx);
 	if (ret) {
 		dev_err(pil->dev, "Failed to vote for vdd_cx(rc:%d)\n", ret);
@@ -134,6 +139,7 @@ int pil_q6v5_make_proxy_votes(struct pil_desc *pil)
 	}
 
 	if (drv->vreg_pll) {
+		pr_err("pil_q6v5_make_proxy_votes: enable vdd_pll\n");
 		ret = regulator_enable(drv->vreg_pll);
 		if (ret) {
 			dev_err(pil->dev, "Failed to vote for vdd_pll(rc:%d)\n",

@@ -123,7 +123,9 @@ static int pil_mss_power_up(struct q6v5_data *drv)
 	int ret = 0;
 	u32 regval;
 
+	pr_err("pil_mss_power_up: entry\n");
 	if (drv->vreg) {
+		pr_err("pil_mss_power_up: enabling modem regulator\n");
 		ret = regulator_enable(drv->vreg);
 		if (ret)
 			dev_err(drv->desc.dev, "Failed to enable modem regulator(rc:%d)\n",
@@ -131,6 +133,7 @@ static int pil_mss_power_up(struct q6v5_data *drv)
 	}
 
 	if (drv->cxrail_bhs) {
+		pr_err("pil_mss_power_up: enabling cxrail_bhs\n");
 		regval = readl_relaxed(drv->cxrail_bhs);
 		regval |= EXTERNAL_BHS_ON;
 		writel_relaxed(regval, drv->cxrail_bhs);
@@ -139,6 +142,7 @@ static int pil_mss_power_up(struct q6v5_data *drv)
 			regval & EXTERNAL_BHS_STATUS, 1, BHS_TIMEOUT_US);
 	}
 
+	pr_err("pil_mss_power_up: done (rc:%d)\n", ret);
 	return ret;
 }
 
@@ -246,24 +250,29 @@ static int pil_msa_wait_for_mba_ready(struct q6v5_data *drv)
 	u64 val = is_timeout_disabled() ? 0 : pbl_mba_boot_timeout_ms * 1000;
 
 	/* Wait for PBL completion. */
+	pr_err("pil_msa_wait_for_mba_ready: waiting for PBL (timeout=%llu us)\n",
+	       val);
 	ret = readl_poll_timeout(drv->rmb_base + RMB_PBL_STATUS, status,
 				 status != 0, POLL_INTERVAL_US, val);
 	if (ret) {
 		dev_err(dev, "PBL boot timed out (rc:%d)\n", ret);
 		return ret;
 	}
+	pr_err("pil_msa_wait_for_mba_ready: PBL done, status=%u\n", status);
 	if (status != STATUS_PBL_SUCCESS) {
 		dev_err(dev, "PBL returned unexpected status %d\n", status);
 		return -EINVAL;
 	}
 
 	/* Wait for MBA completion. */
+	pr_err("pil_msa_wait_for_mba_ready: waiting for MBA\n");
 	ret = readl_poll_timeout(drv->rmb_base + RMB_MBA_STATUS, status,
 				status != 0, POLL_INTERVAL_US, val);
 	if (ret) {
 		dev_err(dev, "MBA boot timed out (rc:%d)\n", ret);
 		return ret;
 	}
+	pr_err("pil_msa_wait_for_mba_ready: MBA done, status=%u\n", status);
 	if (status != STATUS_XPU_UNLOCKED &&
 	    status != STATUS_XPU_UNLOCKED_SCRIBBLED) {
 		dev_err(dev, "MBA returned unexpected status %d\n", status);
@@ -381,12 +390,15 @@ int pil_mss_make_proxy_votes(struct pil_desc *pil)
 	struct q6v5_data *drv = container_of(pil, struct q6v5_data, desc);
 	int uv = 0;
 
+	pr_err("pil_mss_make_proxy_votes: entry\n");
+
 	ret = of_property_read_u32(pil->dev->of_node, "vdd_mx-uV", &uv);
 	if (ret) {
 		dev_err(pil->dev, "missing vdd_mx-uV property(rc:%d)\n", ret);
 		return ret;
 	}
 
+	pr_err("pil_mss_make_proxy_votes: set vreg_mx voltage %d\n", uv);
 	ret = regulator_set_voltage(drv->vreg_mx, uv, INT_MAX);
 	if (ret) {
 		dev_err(pil->dev, "Failed to request vreg_mx voltage(rc:%d)\n",
@@ -394,12 +406,14 @@ int pil_mss_make_proxy_votes(struct pil_desc *pil)
 		return ret;
 	}
 
+	pr_err("pil_mss_make_proxy_votes: enable vreg_mx\n");
 	ret = regulator_enable(drv->vreg_mx);
 	if (ret) {
 		dev_err(pil->dev, "Failed to enable vreg_mx(rc:%d)\n", ret);
 		regulator_set_voltage(drv->vreg_mx, 0, INT_MAX);
 		return ret;
 	}
+	pr_err("pil_mss_make_proxy_votes: vreg_mx done, calling q6v5 proxy votes\n");
 
 	ret = pil_q6v5_make_proxy_votes(pil);
 	if (ret) {
@@ -407,6 +421,7 @@ int pil_mss_make_proxy_votes(struct pil_desc *pil)
 		regulator_set_voltage(drv->vreg_mx, 0, INT_MAX);
 	}
 
+	pr_err("pil_mss_make_proxy_votes: done (rc:%d)\n", ret);
 	return ret;
 }
 
@@ -465,19 +480,24 @@ static int pil_mss_reset(struct pil_desc *pil)
 	if (drv->mba_dp_phys)
 		start_addr = drv->mba_dp_phys;
 
+	pr_err("pil_mss_reset: entry, start_addr=%pa\n", &start_addr);
+
 	/*
 	 * Bring subsystem out of reset and enable required
 	 * regulators and clocks.
 	 */
+	pr_err("pil_mss_reset: power_up\n");
 	ret = pil_mss_power_up(drv);
 	if (ret)
 		goto err_power;
 
 	/* Deassert reset to subsystem and wait for propagation */
+	pr_err("pil_mss_reset: restart_reg(deassert)\n");
 	ret = pil_mss_restart_reg(drv, 0);
 	if (ret)
 		goto err_restart;
 
+	pr_err("pil_mss_reset: enable_clks\n");
 	ret = pil_mss_enable_clks(drv);
 	if (ret)
 		goto err_clks;
@@ -511,17 +531,20 @@ static int pil_mss_reset(struct pil_desc *pil)
 	/* Make sure RMB regs are written before bringing modem out of reset */
 	mb();
 
+	pr_err("pil_mss_reset: q6v5_reset\n");
 	ret = pil_q6v5_reset(pil);
 	if (ret)
 		goto err_q6v5_reset;
 
 	/* Wait for MBA to start. Check for PBL and MBA errors while waiting. */
 	if (drv->self_auth) {
+		pr_err("pil_mss_reset: waiting for MBA ready\n");
 		ret = pil_msa_wait_for_mba_ready(drv);
 		if (ret)
 			goto err_q6v5_reset;
 	}
 
+	pr_err("pil_mss_reset: MBA boot done\n");
 	dev_info(pil->dev, "MBA boot done\n");
 	drv->is_booted = true;
 
@@ -556,12 +579,15 @@ int pil_mss_reset_load_mba(struct pil_desc *pil)
 	struct device *dma_dev = md->mba_mem_dev_fixed ?: &md->mba_mem_dev;
 
 	fw_name_p = drv->non_elf_image ? fw_name_legacy : fw_name;
+	pr_err("pil_mss_reset_load_mba: requesting firmware %s\n", fw_name_p);
 	ret = request_firmware(&fw, fw_name_p, pil->dev);
 	if (ret) {
 		dev_err(pil->dev, "Failed to locate %s (rc:%d)\n",
 						fw_name_p, ret);
 		return ret;
 	}
+	pr_err("pil_mss_reset_load_mba: firmware loaded (%zu bytes)\n",
+	       fw->size);
 
 	data = fw ? fw->data : NULL;
 	if (!data) {
@@ -572,6 +598,7 @@ int pil_mss_reset_load_mba(struct pil_desc *pil)
 
 	drv->mba_dp_size = SZ_1M;
 
+	pr_err("pil_mss_reset_load_mba: arch_setup_dma_ops\n");
 	arch_setup_dma_ops(dma_dev, 0, 0, NULL, 0);
 
 	dma_dev->coherent_dma_mask = DMA_BIT_MASK(sizeof(dma_addr_t) * 8);
@@ -594,6 +621,8 @@ int pil_mss_reset_load_mba(struct pil_desc *pil)
 		drv->mba_dp_size += drv->dp_size;
 	}
 
+	pr_err("pil_mss_reset_load_mba: dma_alloc_attrs %zx bytes\n",
+	       drv->mba_dp_size);
 	mba_dp_virt = dma_alloc_attrs(dma_dev, drv->mba_dp_size, &mba_dp_phys,
 				   GFP_KERNEL, &md->attrs_dma);
 	if (!mba_dp_virt) {
@@ -637,11 +666,13 @@ int pil_mss_reset_load_mba(struct pil_desc *pil)
 		}
 	}
 
+	pr_err("pil_mss_reset_load_mba: calling pil_mss_reset\n");
 	ret = pil_mss_reset(pil);
 	if (ret) {
 		dev_err(pil->dev, "MBA boot failed(rc:%d)\n", ret);
 		goto err_mss_reset;
 	}
+	pr_err("pil_mss_reset_load_mba: pil_mss_reset done\n");
 
 	if (dp_fw)
 		release_firmware(dp_fw);
@@ -681,6 +712,8 @@ static int pil_msa_auth_modem_mdt(struct pil_desc *pil, const u8 *metadata,
 	dma_set_attr(DMA_ATTR_SKIP_ZEROING, &attrs);
 	dma_set_attr(DMA_ATTR_STRONGLY_ORDERED, &attrs);
 	/* Make metadata physically contiguous and 4K aligned. */
+	pr_err("pil_msa_auth_modem_mdt: dma_alloc %zu bytes for metadata\n",
+	       size);
 	mdata_virt = dma_alloc_attrs(dma_dev, size, &mdata_phys, GFP_KERNEL,
 				     &attrs);
 	if (!mdata_virt) {
@@ -709,8 +742,12 @@ static int pil_msa_auth_modem_mdt(struct pil_desc *pil, const u8 *metadata,
 	writel_relaxed(0, drv->rmb_base + RMB_PMI_CODE_LENGTH);
 
 	/* Pass address of meta-data to the MBA and perform authentication */
+	pr_err("pil_msa_auth_modem_mdt: writing meta-data addr %pa, sending CMD_META_DATA_READY\n",
+	       &mdata_phys);
 	writel_relaxed(mdata_phys, drv->rmb_base + RMB_PMI_META_DATA);
 	writel_relaxed(CMD_META_DATA_READY, drv->rmb_base + RMB_MBA_COMMAND);
+	pr_err("pil_msa_auth_modem_mdt: polling MBA_STATUS (timeout=%llu us)\n",
+	       val);
 	ret = readl_poll_timeout(drv->rmb_base + RMB_MBA_STATUS, status,
 			status == STATUS_META_DATA_AUTH_SUCCESS || status < 0,
 			POLL_INTERVAL_US, val);
@@ -752,10 +789,12 @@ static int pil_msa_mss_reset_mba_load_auth_mdt(struct pil_desc *pil,
 {
 	int ret;
 
+	pr_err("pil_msa_mss_reset_mba_load_auth_mdt: entry\n");
 	ret = pil_mss_reset_load_mba(pil);
 	if (ret)
 		return ret;
 
+	pr_err("pil_msa_mss_reset_mba_load_auth_mdt: MBA loaded, auth modem mdt\n");
 	return pil_msa_auth_modem_mdt(pil, metadata, size);
 }
 

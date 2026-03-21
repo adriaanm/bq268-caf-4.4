@@ -84,6 +84,9 @@ if [ -e /dev/ttyGS0 ]; then
         echo " $(uname -r) / $(uname -m)"
         echo "========================================"
         echo ""
+        echo "Modem PIL: trigger manually with:"
+        echo "  echo 1 > /sys/kernel/boot_adsp/boot"
+        echo ""
     } > /dev/ttyGS0
     export ENV=/etc/profile
     # Respawn shell forever so quitting screen doesn't kill console

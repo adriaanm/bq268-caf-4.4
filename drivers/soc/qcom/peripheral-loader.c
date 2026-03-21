@@ -769,16 +769,21 @@ int pil_boot(struct pil_desc *desc)
 	if (desc->shutdown_fail)
 		pil_err(desc, "Subsystem shutdown failed previously!\n");
 
+	pr_err("pil_boot: [%s] entry\n", desc->name);
+
 	/* Reinitialize for new image */
 	pil_release_mmap(desc);
 
 	down_read(&pil_pm_rwsem);
 	snprintf(fw_name, sizeof(fw_name), "%s.mdt", desc->fw_name);
+	pr_err("pil_boot: [%s] requesting firmware %s\n", desc->name, fw_name);
 	ret = request_firmware(&fw, fw_name, desc->dev);
 	if (ret) {
 		pil_err(desc, "Failed to locate %s(rc:%d)\n", fw_name, ret);
 		goto out;
 	}
+	pr_err("pil_boot: [%s] firmware loaded (%zu bytes)\n",
+	       desc->name, fw->size);
 
 	if (fw->size < sizeof(*ehdr)) {
 		pil_err(desc, "Not big enough to be an elf header\n");
@@ -812,26 +817,34 @@ int pil_boot(struct pil_desc *desc)
 		goto release_fw;
 
 	desc->priv->unvoted_flag = 0;
+	pr_err("pil_boot: [%s] proxy_vote start\n", desc->name);
 	ret = pil_proxy_vote(desc);
 	if (ret) {
 		pil_err(desc, "Failed to proxy vote(rc:%d)\n", ret);
 		goto release_fw;
 	}
+	pr_err("pil_boot: [%s] proxy_vote done\n", desc->name);
 
-	if (desc->ops->init_image)
+	if (desc->ops->init_image) {
+		pr_err("pil_boot: [%s] init_image start\n", desc->name);
 		ret = desc->ops->init_image(desc, fw->data, fw->size);
+	}
 	if (ret) {
 		pil_err(desc, "Initializing image failed(rc:%d)\n", ret);
 		goto err_boot;
 	}
+	pr_err("pil_boot: [%s] init_image done\n", desc->name);
 
-	if (desc->ops->mem_setup)
+	if (desc->ops->mem_setup) {
+		pr_err("pil_boot: [%s] mem_setup start\n", desc->name);
 		ret = desc->ops->mem_setup(desc, priv->region_start,
 				priv->region_end - priv->region_start);
+	}
 	if (ret) {
 		pil_err(desc, "Memory setup error(rc:%d)\n", ret);
 		goto err_deinit_image;
 	}
+	pr_err("pil_boot: [%s] mem_setup done\n", desc->name);
 
 	if (desc->subsys_vmid > 0) {
 		/**
@@ -876,11 +889,13 @@ int pil_boot(struct pil_desc *desc)
 		hyp_assign = false;
 	}
 
+	pr_err("pil_boot: [%s] auth_and_reset start\n", desc->name);
 	ret = desc->ops->auth_and_reset(desc);
 	if (ret) {
 		pil_err(desc, "Failed to bring out of reset(rc:%d)\n", ret);
 		goto err_auth_and_reset;
 	}
+	pr_err("pil_boot: [%s] auth_and_reset done\n", desc->name);
 	pil_info(desc, "Brought out of reset\n");
 	desc->modem_ssr = false;
 err_auth_and_reset:
