@@ -837,15 +837,35 @@ static int pil_msa_mba_auth(struct pil_desc *pil)
 	u64 val = is_timeout_disabled() ? 0 : modem_auth_timeout_ms * 1000;
 
 	/* Wait for all segments to be authenticated or an error to occur */
-	ret = readl_poll_timeout(drv->rmb_base + RMB_MBA_STATUS, status,
-		status == STATUS_AUTH_COMPLETE || status < 0, 50, val);
-	if (ret) {
-		dev_err(pil->dev, "MBA authentication of image timed out(rc:%d)\n",
-									ret);
-	} else if (status < 0) {
-		dev_err(pil->dev, "MBA returned error %d for image\n", status);
-		ret = -EINVAL;
+	/*
+	 * Use a manual jiffies+udelay loop instead of readl_poll_timeout
+	 * because usleep_range (hrtimer) hangs on MSM8909 when modem Q6
+	 * boot disrupts timer interrupt delivery.
+	 */
+	pr_err("pil_msa_mba_auth: polling for auth complete (timeout=%llu us)\n",
+	       val);
+	{
+		unsigned long deadline = jiffies + usecs_to_jiffies(val);
+		do {
+			status = readl_relaxed(drv->rmb_base + RMB_MBA_STATUS);
+			if (status == STATUS_AUTH_COMPLETE || status < 0)
+				break;
+			udelay(50);
+		} while (val == 0 || time_before(jiffies, deadline));
+
+		if (status == STATUS_AUTH_COMPLETE) {
+			ret = 0;
+		} else if (status < 0) {
+			dev_err(pil->dev, "MBA returned error %d for image\n",
+								status);
+			ret = -EINVAL;
+		} else {
+			dev_err(pil->dev,
+				"MBA auth timed out (status=%d)\n", status);
+			ret = -ETIMEDOUT;
+		}
 	}
+	pr_err("pil_msa_mba_auth: done, status=%d ret=%d\n", status, ret);
 
 	if (drv->q6) {
 		if (drv->q6->mba_dp_virt) {
