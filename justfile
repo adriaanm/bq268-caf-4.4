@@ -113,11 +113,11 @@ dev-reboot:
 
 # ── Iteration cycle ────────────────────────────────────
 
-# full cycle: build initramfs → boot → wait for serial → grab dmesg
-cycle: bootimg-initramfs
+# full cycle: build → boot (eMMC rootfs p36) → wait for serial → grab dmesg
+cycle: bootimg
     #!/usr/bin/env bash
     echo "=== Booting device ==="
-    fastboot boot {{out}}/boot-initramfs.img
+    fastboot boot {{out}}/boot-$(git rev-parse --short HEAD).img
     just wait-serial
     echo "=== Device booted, grabbing dmesg ==="
     just serial "dmesg" "15" | tee {{out}}/dmesg-$(git rev-parse --short HEAD).txt
