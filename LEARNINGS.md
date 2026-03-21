@@ -54,10 +54,54 @@ DTS nodes: `cpubw` (devbw), `cpu-bwmon` (bimc-bwmon2 @ 0x408000), `devfreq-cpufr
 
 The MSM8909 timer DTS is identical between 3.18 and 4.4 and functionally equivalent to MSM8916. The `arm,armv7-timer` node with PPIs 2/3/4/1 and `arm,armv7-timer-mem` frame timer at 0xb020000 are correct. The timer hang was caused by the idle path, not the timer configuration.
 
+## SMP — Only CPU 0 Online
+
+On 4.4, only CPU 0 comes up despite `CONFIG_SMP=y`, `CONFIG_NR_CPUS=4`, and DT `enable-method = "qcom,kpss-acc-v2"` on each CPU. On 3.18, all 4 cores boot.
+
+**Impact**: Single-core operation makes any blocking kernel operation fatal — there's no other CPU to keep the scheduler, interrupts, or I/O processing alive. This is the root cause of the modem PIL hang (5s auth poll freezes the entire system).
+
+**Root cause found**: `qcom_scm_set_cold_boot_addr()` fails → dmesg shows `Failed to set CPU boot address, disabling SMP`. The 4.4 SCM call (`QCOM_SCM_SVC_BOOT/QCOM_SCM_BOOT_ADDR` via `qcom_scm-32.c`) returns an error. The 3.18 SCM call (`scm_set_boot_addr()` via `scm-boot.c`) uses the same SCM service/command but different calling convention.
+
+**Investigation needed**:
+- Compare SCM call format: 3.18 `scm_set_boot_addr(virt_to_phys(secondary_startup), flags)` vs 4.4 `qcom_scm_call(SVC_BOOT, BOOT_ADDR, {flags, addr})`
+- The 3.18 call uses `scm_call_atomic2()` (no mutex, register-based), while 4.4 `qcom_scm_call()` uses the buffer-based calling convention. MSM8909's TZ may only support the atomic/register-based interface.
+- Check if 3.18's `CONFIG_MSM_SCM` legacy SCM is needed alongside `CONFIG_QCOM_SCM`
+- The `kpssv2_release_secondary()` power-up sequence is identical between kernels — only the boot address SCM call differs
+
+## Modem PIL — DMA and Auth Fixes
+
+The modem Q6 DSP PIL (Peripheral Image Loader) had two bugs on 4.4:
+
+### DMA alloc hang (fixed)
+
+`pil_mss_reset_load_mba()` calls `arch_setup_dma_ops(dma_dev, 0, 0, NULL, 0)` on a dummy `struct device` before allocating 1MB for MBA firmware. This call was added in 4.4 (not present in 3.18).
+
+On ARM, `arch_setup_dma_ops` with `iommu=NULL` sets `arm_dma_ops`, which routes `dma_alloc_attrs(1MB)` through `alloc_pages(GFP_KERNEL, order=8)` instead of CMA. The order-8 buddy allocation blocks in memory compaction.
+
+On 3.18, without `arch_setup_dma_ops`, the dummy device falls through to the default CMA allocator which handles 1MB easily.
+
+**Fix**: Remove the `arch_setup_dma_ops()` call. Just set `coherent_dma_mask` like 3.18.
+
+### Auth poll hang (workaround, needs SMP fix)
+
+`pil_msa_mba_auth()` uses `readl_poll_timeout()` to wait for `STATUS_AUTH_COMPLETE`. This macro calls `usleep_range()` internally, which relies on hrtimers. On a single CPU, the auth takes ~5s, and during that time no timer interrupts are processed → `usleep_range` never wakes → hang.
+
+**Workaround**: Replaced with `mdelay(1) + cond_resched()` loop. Still hangs on single core because `mdelay` burns the only CPU. With SMP working (4 cores), this should be survivable — the kworker polls on one core while others keep the system alive.
+
+### err_ready wait (workaround, needs SMP fix)
+
+After `pil_boot` completes, `subsystem_restart.c` calls `wait_for_completion_timeout(&err_ready, 10s)`. This also relies on timer interrupts. On failure it **panics**.
+
+**Workaround**: Skip the wait entirely (return 0). The modem boots and the err_ready GPIO should eventually fire via SMP2P, but the completion wait can't work without timers on a single core.
+
+### Modem firmware location
+
+Firmware files (`modem.mdt`, `mba.mbn`, `modem.b00-b24`, `wcnss.*`) are pre-extracted to `/lib/firmware/` on the Alpine rootfs (p36). The modem partition (mmcblk0p1, FAT16) has them in an `image/` subdirectory but we don't need to mount it.
+
 ## Boot Configuration
 
-- No initramfs (for rootfs boot) — kernel mounts p36 directly
-- Cmdline: `root=/dev/mmcblk0p36 rootfstype=ext4 rootwait rw console=tty0 console=ttyHSL0,115200`
+- eMMC rootfs on p36 (Alpine Linux / OpenRC) — no initramfs
+- Cmdline: `root=/dev/mmcblk0p36 rootfstype=ext4 rootwait rw console=tty0 loglevel=7`
 - `.scmversion` file suppresses git hash in kernel version
 - `FW_LOADER_USER_HELPER_FALLBACK` must be disabled — causes 60s hangs per firmware request
 

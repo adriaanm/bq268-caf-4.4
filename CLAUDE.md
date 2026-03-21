@@ -25,19 +25,21 @@ Every repeated command goes in the `justfile`. Run `just` to list recipes.
 ## Workflow: Commit Before Flash
 
 1. **Commit first** — git commit before building/flashing
-2. **Build and boot** — `just cycle` (builds initramfs image + boots via fastboot)
+2. **Build and boot** — `just cycle` (builds kernel + boot.img, boots via fastboot)
 3. **Record outcome** — `just note "PASS: description"` or `just note "FAIL: description"`
 
 ## Workflow: Iteration Cycle
 
-The device boots our 4.4 kernel via `fastboot boot` (RAM, not flashed). The 3.18 kernel remains on the boot partition. Reboot-to-bootloader works directly from 4.4 via SPMI/PON (IMEM magic + warm reset).
+The device boots our 4.4 kernel via `fastboot boot` (RAM, not flashed). The 3.18 kernel remains on the boot partition. Reboot-to-bootloader works from both kernels.
 
-- **`just cycle`** — build initramfs image → `fastboot boot` → wait for serial → grab dmesg (requires device in fastboot)
+- **`just cycle`** — build kernel + boot.img (eMMC rootfs) → `fastboot boot` → wait for serial → grab dmesg (requires device in fastboot)
 - **`just recycle`** — reboot current device → cycle (fully autonomous, no manual intervention)
 - **`just serial "cmd"`** — run a command on the device via USB serial (`/dev/ttyACM0`)
-- **`just dev-reboot`** — reboot to fastboot via IMEM magic + warm reset (direct, no intermediary)
+- **`just dev-reboot`** — reboot to fastboot via `/usr/local/bin/reboot-bootloader` on device
 
-The serial console is USB ACM via configfs gadget on `ttyGS0` (device) / `ttyACM0` (host). The init script respawns the shell if it exits.
+The serial console is USB ACM via configfs gadget on `ttyGS0` (device) / `ttyACM0` (host). The Alpine rootfs (p36) sets up USB gadget via OpenRC (`usb-gadget` at boot, `usb-gadget-ecm` at default runlevel).
+
+**Timing notes**: OpenRC boot takes ~130s for serial to appear. ECM rebind drops serial briefly — wait 30s after serial appears before using it. For long-running tests, prefer `just serial 'cmd1; cmd2; sync'` in a single invocation over separate commands.
 
 ## Workflow: Defconfig Changes
 
@@ -87,7 +89,8 @@ When porting a subsystem from 3.18 to 4.4:
 | COMMON_CLK_MSM only | Legacy CAF clock framework; mainline COMMON_CLK conflicts |
 | USB configfs | 4.4 removed USB_G_ANDROID; Alpine handles configfs |
 | Non-PSCI idle | MSM8909 TZ has no PSCI; ported SCM-based idle from 3.18 |
-| SMP via DT | enable-method + ACC/SAW nodes (3.18 used machine smp_ops) |
+| SMP via DT | enable-method + ACC/SAW nodes (3.18 used machine smp_ops). **BROKEN**: only CPU 0 comes up. |
+| eMMC rootfs | Alpine on p36, no initramfs. Firmware at `/lib/firmware/` (pre-extracted from modem partition). |
 | GCC 7.4 | GCC 8+ breaks BUILD_BUG_ON; GCC 4.9 works but old |
 | lpm-levels disabled | Breaks timer in idle; sleep hangs. WFI via default arch_cpu_idle works. |
 | always-on arch timer | Prevents C3STOP handoff to broken broadcast timer |
@@ -97,7 +100,9 @@ When porting a subsystem from 3.18 to 4.4:
 
 | Issue | Status | Notes |
 |-------|--------|-------|
-| sleep() hangs with lpm-levels | **Workaround**: lpm-levels disabled in DTS | Timer works in periodic (402 IRQs boot) and during busywait (13920 IRQs), but dies when CPU enters idle via lpm-levels. Not C3STOP, not deep idle, not broadcast enable — something in cpuidle registration or probe breaks the per-CPU timer. |
+| SMP broken — only CPU 0 online | **Open** | 3.18 boots all 4 cores. 4.4 uses DT enable-method `qcom,kpss-acc-v2` + ACC/SAW nodes. Secondary CPUs never come up. Single-core makes everything fragile. |
+| sleep() hangs with lpm-levels | **Workaround**: lpm-levels disabled in DTS | Timer works in periodic (402 IRQs boot) and during busywait (13920 IRQs), but dies when CPU enters idle via lpm-levels. |
+| Modem PIL hangs system | **Workaround**: DMA fix + poll workarounds, but hangs on single core | Modem Q6 boots fully (MBA + auth OK), but 5s auth poll on sole CPU freezes system. Fix SMP first. See `LEARNINGS.md` for details. |
 | Bus scaling crashes | **Workaround**: QCOM_BUS_SCALING + BIMC_BWMON disabled | Kernel hangs before init when enabled. Needs DT or driver debug. |
-| SPMI child enumeration | **Resolved** | Fixed: 4.4-style DT bindings (2-cell reg, compatible, 4-cell interrupts) + CONFIG_MFD_SPMI_PMIC. PM8909 detected, PON/RTC/VADC probe OK. |
-| Broadcast timer (arch_mem_timer) | **Open** | Selected as broadcast device, in oneshot mode, but 0 interrupts ever. Blocks deep idle (standalone_pc, pc). |
+| SPMI child enumeration | **Resolved** | Fixed: 4.4-style DT bindings + CONFIG_MFD_SPMI_PMIC. |
+| Broadcast timer (arch_mem_timer) | **Open** | Selected as broadcast device, in oneshot mode, but 0 interrupts ever. Blocks deep idle. |
