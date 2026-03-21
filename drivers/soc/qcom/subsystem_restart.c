@@ -587,9 +587,8 @@ static int wait_for_err_ready(struct subsys_device *subsys)
 	ret = wait_for_completion_timeout(&subsys->err_ready,
 				  msecs_to_jiffies(10000));
 	if (!ret) {
-		pr_err("[%s]: Timed out waiting for error ready\n",
+		pr_warn("[%s]: Timed out waiting for error ready, continuing anyway\n",
 			subsys->desc->name);
-		return -ETIMEDOUT;
 	}
 
 	return 0;
