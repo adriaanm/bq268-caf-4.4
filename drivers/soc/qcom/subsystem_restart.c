@@ -584,13 +584,14 @@ static int wait_for_err_ready(struct subsys_device *subsys)
 				enable_debug == 1 || is_timeout_disabled())
 		return 0;
 
-	// FIXME: wait_for_completion_timeout relies on timer interrupts which
-	// die after modem Q6 power-up on MSM8909. Skip the wait for now.
-	// Root cause: arch_timer interrupt delivery breaks when modem powers
-	// up — same issue as lpm-levels sleep hang. Needs investigation of
-	// timer/GIC/power-domain interaction during Q6 boot.
-	pr_warn("[%s]: Skipping err_ready wait (timer workaround)\n",
-		subsys->desc->name);
+	ret = wait_for_completion_timeout(&subsys->err_ready,
+				  msecs_to_jiffies(10000));
+	if (!ret) {
+		pr_err("[%s]: Timed out waiting for error ready\n",
+			subsys->desc->name);
+		return -ETIMEDOUT;
+	}
+
 	return 0;
 }
 
