@@ -54,19 +54,22 @@ DTS nodes: `cpubw` (devbw), `cpu-bwmon` (bimc-bwmon2 @ 0x408000), `devfreq-cpufr
 
 The MSM8909 timer DTS is identical between 3.18 and 4.4 and functionally equivalent to MSM8916. The `arm,armv7-timer` node with PPIs 2/3/4/1 and `arm,armv7-timer-mem` frame timer at 0xb020000 are correct. The timer hang was caused by the idle path, not the timer configuration.
 
-## SMP — Only CPU 0 Online
+## SMP — Fixed, All 4 CPUs Online
 
-On 4.4, only CPU 0 comes up despite `CONFIG_SMP=y`, `CONFIG_NR_CPUS=4`, and DT `enable-method = "qcom,kpss-acc-v2"` on each CPU. On 3.18, all 4 cores boot.
+**Root cause**: Two issues in the 4.4 `arch/arm/mach-qcom/platsmp.c`:
 
-**Impact**: Single-core operation makes any blocking kernel operation fatal — there's no other CPU to keep the scheduler, interrupts, or I/O processing alive. This is the root cause of the modem PIL hang (5s auth poll freezes the entire system).
+1. **Wrong SCM boot address API**: The 4.4 Linaro SCM used `SCM_BOOT_ADDR` (cmd 0x01), but MSM8909's TZ primarily supports `SCM_BOOT_ADDR_MC` (cmd 0x11, multi-cluster). TZ disassembly confirms: BOOT_ADDR_MC has 39 references in the syscall descriptor table vs 7 for legacy BOOT_ADDR. The 3.18 kernel detects this via `scm_is_mc_boot_available()` and uses `scm_set_boot_addr_mc()`. Both buffer-based `scm_call()` and register-based `scm_call_atomic2()` fail with the legacy API (TZ returns -1).
 
-**Root cause found**: `qcom_scm_set_cold_boot_addr()` fails → dmesg shows `Failed to set CPU boot address, disabling SMP`. The 4.4 SCM call (`QCOM_SCM_SVC_BOOT/QCOM_SCM_BOOT_ADDR` via `qcom_scm-32.c`) returns an error. The 3.18 SCM call (`scm_set_boot_addr()` via `scm-boot.c`) uses the same SCM service/command but different calling convention.
+2. **Wrong CPU release sequence**: The generic `kpssv2_release_secondary()` uses standard KPSS v2 register patterns (multi-step BHS/LDO + L2 SAW write) that don't match MSM8909 hardware. The 3.18 `arm_release_secondary()` uses a completely different 6-step sequence with custom bit patterns (including CORE_RST bit 4 and undocumented bit 17). The L2 SAW write at 0x0b01201c caused a hard lockup.
 
-**Investigation needed**:
-- Compare SCM call format: 3.18 `scm_set_boot_addr(virt_to_phys(secondary_startup), flags)` vs 4.4 `qcom_scm_call(SVC_BOOT, BOOT_ADDR, {flags, addr})`
-- The 3.18 call uses `scm_call_atomic2()` (no mutex, register-based), while 4.4 `qcom_scm_call()` uses the buffer-based calling convention. MSM8909's TZ may only support the atomic/register-based interface.
-- Check if 3.18's `CONFIG_MSM_SCM` legacy SCM is needed alongside `CONFIG_QCOM_SCM`
-- The `kpssv2_release_secondary()` power-up sequence is identical between kernels — only the boot address SCM call differs
+**Fix** (in `arch/arm/mach-qcom/platsmp.c`):
+- Use `scm_set_boot_addr_mc()` from `<soc/qcom/scm-boot.h>` with MPIDR affinity masks
+- Replace kpssv2 register sequence with 3.18's `arm_release_secondary` sequence (DT-based ACC lookup, no L2 SAW)
+
+**TZ analysis** (from disassembly of tz.mbn):
+- ACC/SAW register addresses (0x0b088000 etc.) are NOT in the TZ binary — CPU power management uses SCM API, but ACC registers are accessible from non-secure world
+- TZ supports both legacy buffer-based and SMCCC calling conventions (`is_scm_armv8()` detects)
+- The legacy `scm_call()` path works for `SCM_BOOT_ADDR_MC` but not `SCM_BOOT_ADDR`
 
 ## Modem PIL — DMA and Auth Fixes
 
