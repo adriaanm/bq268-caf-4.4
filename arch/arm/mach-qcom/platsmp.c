@@ -18,6 +18,7 @@
 #include <linux/smp.h>
 #include <linux/io.h>
 #include <linux/qcom_scm.h>
+#include <soc/qcom/scm.h>
 #include <soc/qcom/scm-boot.h>
 
 #include <asm/smp_plat.h>
@@ -303,7 +304,13 @@ static void __init qcom_smp_prepare_cpus(unsigned int max_cpus)
 			flags |= cold_boot_flags[map];
 	}
 
-	if (scm_set_boot_addr(virt_to_phys(secondary_startup_arm), flags)) {
+	/*
+	 * Use register-based atomic SCM call — the buffer-based scm_call()
+	 * returns -1 from TZ on this firmware, possibly due to memory
+	 * protection or buffer format differences between 3.18 and 4.4.
+	 */
+	if (scm_call_atomic2(SCM_SVC_BOOT, SCM_BOOT_ADDR,
+			     flags, virt_to_phys(secondary_startup_arm))) {
 		for_each_present_cpu(cpu) {
 			if (cpu == smp_processor_id())
 				continue;
