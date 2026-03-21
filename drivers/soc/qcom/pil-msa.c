@@ -849,7 +849,8 @@ static int pil_msa_mba_auth(struct pil_desc *pil)
 			status = readl_relaxed(drv->rmb_base + RMB_MBA_STATUS);
 			if (status == STATUS_AUTH_COMPLETE || status < 0)
 				break;
-			udelay(50);
+			mdelay(1);
+			cond_resched();
 		} while (val == 0 || time_before(jiffies, deadline));
 
 		if (status == STATUS_AUTH_COMPLETE) {
