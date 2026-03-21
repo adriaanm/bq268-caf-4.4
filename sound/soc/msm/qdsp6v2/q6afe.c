@@ -703,7 +703,8 @@ int afe_q6_interface_prepare(void)
 		this_afe.apr = apr_register("ADSP", "AFE", afe_callback,
 			0xFFFFFFFF, &this_afe);
 		if (this_afe.apr == NULL) {
-			pr_err("%s: Unable to register AFE\n", __func__);
+			pr_err_ratelimited("%s: Unable to register AFE\n",
+					   __func__);
 			ret = -ENODEV;
 		}
 		rtac_set_afe_handle(this_afe.apr);
@@ -1819,7 +1820,7 @@ static int afe_aanc_port_cfg(void *apr, uint16_t tx_port, uint16_t rx_port)
 
 	ret = afe_q6_interface_prepare();
 	if (ret != 0) {
-		pr_err("%s: Q6 interface prepare failed %d\n", __func__, ret);
+		pr_err_ratelimited("%s: Q6 interface prepare failed %d\n", __func__, ret);
 		return -EINVAL;
 	}
 
@@ -1904,7 +1905,7 @@ static int afe_aanc_mod_enable(void *apr, uint16_t tx_port, uint16_t enable)
 
 	ret = afe_q6_interface_prepare();
 	if (ret != 0) {
-		pr_err("%s: Q6 interface prepare failed %d\n", __func__, ret);
+		pr_err_ratelimited("%s: Q6 interface prepare failed %d\n", __func__, ret);
 		return -EINVAL;
 	}
 
@@ -2062,7 +2063,7 @@ int afe_set_config(enum afe_config_type config_type, void *config_data, int arg)
 	pr_debug("%s: enter config_type %d\n", __func__, config_type);
 	ret = afe_q6_interface_prepare();
 	if (ret) {
-		pr_err("%s: Q6 interface prepare failed %d\n", __func__, ret);
+		pr_err_ratelimited("%s: Q6 interface prepare failed %d\n", __func__, ret);
 		return ret;
 	}
 
@@ -2146,7 +2147,7 @@ int afe_send_spdif_clk_cfg(struct afe_param_id_spdif_clk_cfg *cfg,
 
 	ret = afe_q6_interface_prepare();
 	if (ret) {
-		pr_err("%s: Q6 interface prepare failed %d\n", __func__, ret);
+		pr_err_ratelimited("%s: Q6 interface prepare failed %d\n", __func__, ret);
 		return ret;
 	}
 	clk_cfg.hdr.hdr_field = APR_HDR_FIELD(APR_MSG_TYPE_SEQ_CMD,
@@ -2232,7 +2233,7 @@ int afe_send_spdif_ch_status_cfg(struct afe_param_id_spdif_ch_status_cfg
 
 	ret = afe_q6_interface_prepare();
 	if (ret != 0) {
-		pr_err("%s: Q6 interface prepare failed %d\n", __func__, ret);
+		pr_err_ratelimited("%s: Q6 interface prepare failed %d\n", __func__, ret);
 		return ret;
 	}
 	ch_status.hdr.hdr_field = APR_HDR_FIELD(APR_MSG_TYPE_SEQ_CMD,
@@ -2611,7 +2612,7 @@ int afe_tdm_port_start(u16 port_id, struct afe_tdm_port_config *tdm_port,
 
 	ret = afe_q6_interface_prepare();
 	if (ret != 0) {
-		pr_err("%s: Q6 interface prepare failed %d\n", __func__, ret);
+		pr_err_ratelimited("%s: Q6 interface prepare failed %d\n", __func__, ret);
 		return ret;
 	}
 
@@ -2970,7 +2971,7 @@ static int __afe_port_start(u16 port_id, union afe_port_config *afe_config,
 
 	ret = afe_q6_interface_prepare();
 	if (ret != 0) {
-		pr_err("%s: Q6 interface prepare failed %d\n", __func__, ret);
+		pr_err_ratelimited("%s: Q6 interface prepare failed %d\n", __func__, ret);
 		return ret;
 	}
 
@@ -3544,7 +3545,7 @@ int afe_open(u16 port_id,
 
 	ret = afe_q6_interface_prepare();
 	if (ret != 0) {
-		pr_err("%s: Q6 interface prepare failed %d\n", __func__, ret);
+		pr_err_ratelimited("%s: Q6 interface prepare failed %d\n", __func__, ret);
 		return -EINVAL;
 	}
 
@@ -3693,7 +3694,7 @@ int afe_loopback(u16 enable, u16 rx_port, u16 tx_port)
 
 	ret = afe_q6_interface_prepare();
 	if (ret != 0) {
-		pr_err("%s: Q6 interface prepare failed %d\n", __func__, ret);
+		pr_err_ratelimited("%s: Q6 interface prepare failed %d\n", __func__, ret);
 		return ret;
 	}
 
@@ -3862,7 +3863,7 @@ int afe_start_pseudo_port(u16 port_id)
 
 	ret = afe_q6_interface_prepare();
 	if (ret != 0) {
-		pr_err("%s: Q6 interface prepare failed %d\n", __func__, ret);
+		pr_err_ratelimited("%s: Q6 interface prepare failed %d\n", __func__, ret);
 		return ret;
 	}
 
@@ -3956,7 +3957,7 @@ int afe_port_group_set_param(u16 group_id,
 
 	ret = afe_q6_interface_prepare();
 	if (ret != 0) {
-		pr_err("%s: Q6 interface prepare failed %d\n", __func__, ret);
+		pr_err_ratelimited("%s: Q6 interface prepare failed %d\n", __func__, ret);
 		return ret;
 	}
 
@@ -4016,7 +4017,7 @@ int afe_port_group_enable(u16 group_id,
 
 	ret = afe_q6_interface_prepare();
 	if (ret != 0) {
-		pr_err("%s: Q6 interface prepare failed %d\n", __func__, ret);
+		pr_err_ratelimited("%s: Q6 interface prepare failed %d\n", __func__, ret);
 		return ret;
 	}
 
@@ -5601,7 +5602,7 @@ int afe_set_digital_codec_core_clock(u16 port_id,
 
 	ret = afe_q6_interface_prepare();
 	if (ret != 0) {
-		pr_err("%s: Q6 interface prepare failed %d\n", __func__, ret);
+		pr_err_ratelimited("%s: Q6 interface prepare failed %d\n", __func__, ret);
 		return ret;
 	}
 
@@ -5687,7 +5688,7 @@ int afe_set_lpass_clock(u16 port_id, struct afe_clk_cfg *cfg)
 
 	ret = afe_q6_interface_prepare();
 	if (ret != 0) {
-		pr_err("%s: Q6 interface prepare failed %d\n", __func__, ret);
+		pr_err_ratelimited("%s: Q6 interface prepare failed %d\n", __func__, ret);
 		return ret;
 	}
 
@@ -5770,7 +5771,7 @@ int afe_set_lpass_clk_cfg(int index, struct afe_clk_set *cfg)
 
 	ret = afe_q6_interface_prepare();
 	if (ret != 0) {
-		pr_err("%s: Q6 interface prepare failed %d\n", __func__, ret);
+		pr_err_ratelimited("%s: Q6 interface prepare failed %d\n", __func__, ret);
 		return ret;
 	}
 
@@ -5853,7 +5854,7 @@ int afe_set_lpass_clock_v2(u16 port_id, struct afe_clk_set *cfg)
 
 	ret = afe_set_lpass_clk_cfg(index, cfg);
 	if (ret)
-		pr_err("%s: afe_set_lpass_clk_cfg_v2 failed %d\n",
+		pr_err_ratelimited("%s: afe_set_lpass_clk_cfg_v2 failed %d\n",
 			__func__, ret);
 
 	return ret;
@@ -5886,7 +5887,7 @@ int afe_set_lpass_internal_digital_codec_clock(u16 port_id,
 
 	ret = afe_q6_interface_prepare();
 	if (ret != 0) {
-		pr_err("%s: Q6 interface prepare failed %d\n", __func__, ret);
+		pr_err_ratelimited("%s: Q6 interface prepare failed %d\n", __func__, ret);
 		return ret;
 	}
 
@@ -5967,7 +5968,7 @@ int afe_enable_lpass_core_shared_clock(u16 port_id, u32 enable)
 
 	ret = afe_q6_interface_prepare();
 	if (ret != 0) {
-		pr_err("%s: Q6 interface prepare failed %d\n", __func__, ret);
+		pr_err_ratelimited("%s: Q6 interface prepare failed %d\n", __func__, ret);
 		return ret;
 	}
 
