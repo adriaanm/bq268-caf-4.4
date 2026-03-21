@@ -16,10 +16,12 @@ mount -t configfs configfs /sys/kernel/config
 hostname bq268-caf
 
 # Mount modem firmware partition (mmcblk0p1 = FAT16 "modem")
-# Firmware loader searches /lib/firmware by default
-mkdir -p /lib/firmware
-if mount -t vfat -o ro /dev/mmcblk0p1 /lib/firmware 2>/dev/null; then
+# Files are in image/ subdir; point firmware_class.path there
+mkdir -p /firmware
+if mount -t vfat -o ro /dev/mmcblk0p1 /firmware 2>/dev/null; then
     echo "firmware: modem partition mounted" > $CON
+    # Set firmware search path to the image/ subdir on the partition
+    echo /firmware/image > /sys/module/firmware_class/parameters/path
 else
     echo "firmware: mount FAILED" > $CON
 fi
