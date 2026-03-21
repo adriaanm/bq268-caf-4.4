@@ -95,9 +95,29 @@ After `pil_boot` completes, `subsystem_restart.c` calls `wait_for_err_ready()`. 
 
 ### Modem Q6 watchdog — stalled initialization (open)
 
-After successful PIL boot + auth, the modem Q6 starts running but its internal watchdog fires after ~40s: `dog.c:1522:Watchdog detects stalled initialization`. The Q6 DSP can't complete init — likely waiting for AP-side resources (RPM votes, SMD channels, bus bandwidth). `apr_register: Modem is not Up` confirms SMD/APR link never establishes.
+After successful PIL boot + auth, the modem Q6 starts running but its internal watchdog fires after ~40s: `dog.c:1522:Watchdog detects stalled initialization`. The Q6 DSP can't complete init — likely waiting for AP-side resources. `apr_register: Modem is not Up` confirms SMD/APR link never establishes. Triggering modem PIL also crashes the USB gadget (serial drops immediately), suggesting shared power domain interference.
 
-**Investigation**: Compare modem subsystem DTS, RPM, SMD, and bus scaling setup between 3.18 and 4.4. Check if `QCOM_BUS_SCALING` (currently disabled due to crash) is required for modem.
+**Investigation needed**: The modem crash with IPC_ROUTER enabled causes a system reboot (even with RELATED restart level). The `try_module_get` oops on corrupted `subsys->owner` (value=1) needs root-causing. Also check if `QCOM_BUS_SCALING` (currently disabled due to crash) is required for modem.
+
+## WiFi (WCNSS) — Working
+
+WCNSS PIL boots, authenticates, and brings up `wlan0` with full internet connectivity (IPv4 DHCP + IPv6 SLAAC). The prima/pronto WLAN driver (`drivers/staging/prima/wlan.ko`) loads as a module.
+
+**Key issue fixed**: The rootfs had a stale `wlan.ko` from an earlier build that exported a duplicate `wcnss_get_iris_name` symbol (already exported by the built-in `wcnss_vreg.c`). The duplicate prevented module load. Updating the `.ko` on the rootfs fixed it.
+
+## Kconfig Renames and Stale Symbols (3.18 → 4.4)
+
+Additional renames discovered beyond the original table:
+
+| 3.18 name | 4.4 name | Effect if wrong |
+|-----------|----------|-----------------|
+| `MSM_WATCHDOG_V2` | `QCOM_WATCHDOG_V2` | No HW watchdog — hard hangs freeze forever instead of rebooting |
+
+## sysmon-qmi breaks subsys registration
+
+`CONFIG_MSM_SYSMON_COMM` compiles both `sysmon.o` and `sysmon-qmi.o`. The QMI variant's `sysmon_notifier_register()` calls `qmi_svc_event_notifier_register()` which fails with `-ENODEV` on MSM8909 (no QMI SSCTL service). This error propagated up through `subsys_register()`, causing `device_unregister()` for modem and wcnss. Venus survived because `ssctl_instance_id=0` skips QMI registration.
+
+**Fix**: Made `qmi_svc_event_notifier_register()` failure non-fatal in `sysmon-qmi.c` — log warning, return 0.
 
 ### Modem firmware location
 

@@ -100,9 +100,10 @@ When porting a subsystem from 3.18 to 4.4:
 
 | Issue | Status | Notes |
 |-------|--------|-------|
-| SMP broken — only CPU 0 online | **Open** | 3.18 boots all 4 cores. 4.4 uses DT enable-method `qcom,kpss-acc-v2` + ACC/SAW nodes. Secondary CPUs never come up. Single-core makes everything fragile. |
-| sleep() hangs with lpm-levels | **Workaround**: lpm-levels disabled in DTS | Timer works in periodic (402 IRQs boot) and during busywait (13920 IRQs), but dies when CPU enters idle via lpm-levels. |
-| Modem PIL hangs system | **Workaround**: DMA fix + poll workarounds, but hangs on single core | Modem Q6 boots fully (MBA + auth OK), but 5s auth poll on sole CPU freezes system. Fix SMP first. See `LEARNINGS.md` for details. |
-| Bus scaling crashes | **Workaround**: QCOM_BUS_SCALING + BIMC_BWMON disabled | Kernel hangs before init when enabled. Needs DT or driver debug. |
+| SMP broken | **Resolved** | Fixed: `scm_set_boot_addr_mc()` + 3.18 `arm_release_secondary` register sequence. All 4 CPUs online. |
+| WiFi (WCNSS) | **Resolved** | Working: wlan0 up, IPv4+IPv6, internet connectivity. Prima wlan.ko module. |
 | SPMI child enumeration | **Resolved** | Fixed: 4.4-style DT bindings + CONFIG_MFD_SPMI_PMIC. |
+| Modem Q6 stalled init | **Open** | PIL boot + auth succeeds, but Q6 watchdog fires after ~40s. APR never connects. Triggering modem also crashes USB gadget. `try_module_get` oops on corrupted `subsys->owner`. |
+| sleep() hangs with lpm-levels | **Workaround**: lpm-levels disabled in DTS | Timer dies when CPU enters idle via lpm-levels. May improve with SMP. |
+| Bus scaling crashes | **Workaround**: QCOM_BUS_SCALING + BIMC_BWMON disabled | Kernel hangs before init when enabled. Needs DT or driver debug. |
 | Broadcast timer (arch_mem_timer) | **Open** | Selected as broadcast device, in oneshot mode, but 0 interrupts ever. Blocks deep idle. |
