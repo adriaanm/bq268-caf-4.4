@@ -13,13 +13,6 @@ mount -t debugfs debugfs /sys/kernel/debug 2>/dev/null
 mount -t tmpfs tmpfs /tmp
 mount -t configfs configfs /sys/kernel/config
 
-# Mount rootfs partition for firmware files
-mkdir -p /mnt/rootfs
-mount -o ro /dev/mmcblk0p36 /mnt/rootfs 2>/dev/null
-if [ -d /mnt/rootfs/lib/firmware ]; then
-    ln -s /mnt/rootfs/lib/firmware /lib/firmware
-fi
-
 hostname bq268-caf
 
 CON=/dev/tty0
@@ -107,13 +100,6 @@ else
         echo 255 > $GREEN 2>/dev/null
         j=0; while [ $j -lt 5000000 ]; do j=$((j+1)); done
     done
-fi
-
-# Trigger modem/ADSP firmware load via PIL (after USB serial is up)
-if [ -f /sys/kernel/boot_adsp/boot ]; then
-    echo "PIL: triggering modem firmware load..." > $CON
-    echo 1 > /sys/kernel/boot_adsp/boot
-    echo "PIL: modem load triggered" > $CON
 fi
 
 # Keep init alive
