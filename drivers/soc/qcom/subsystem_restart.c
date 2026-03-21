@@ -1666,6 +1666,7 @@ struct subsys_device *subsys_register(struct subsys_desc *desc)
 	subsys->dev.parent = desc->dev;
 	subsys->dev.bus = &subsys_bus_type;
 	subsys->dev.release = subsys_device_release;
+	subsys->restart_level = RESET_SUBSYS_COUPLED;
 	subsys->notif_state = -1;
 	subsys->desc->sysmon_pid = -1;
 	strlcpy(subsys->desc->fw_name, desc->name,
