@@ -242,6 +242,13 @@ CONFIG_ZRAM=y
 # Firmware loader (no fallback — avoids 60s timeouts)
 # CONFIG_FW_LOADER_USER_HELPER_FALLBACK is not set
 
+# FAT/VFAT — needed to mount modem firmware partition (mmcblk0p1)
+CONFIG_FAT_FS=y
+CONFIG_VFAT_FS=y
+CONFIG_NLS=y
+CONFIG_NLS_CODEPAGE_437=y
+CONFIG_NLS_ISO8859_1=y
+
 # Subsystem restart + PIL (needed for WCNSS, modem)
 CONFIG_MSM_SUBSYSTEM_RESTART=y
 CONFIG_MSM_PIL=y
