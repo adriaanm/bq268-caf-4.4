@@ -341,7 +341,7 @@ int __pil_mss_deinit_image(struct pil_desc *pil, bool err_path)
 	struct modem_data *drv = dev_get_drvdata(pil->dev);
 	struct q6v5_data *q6_drv = container_of(pil, struct q6v5_data, desc);
 	int ret = 0;
-	struct device *dma_dev = drv->mba_mem_dev_fixed ?: pil->dev;
+	struct device *dma_dev = drv->mba_mem_dev_fixed ?: &drv->mba_mem_dev;
 	s32 status;
 	u64 val = is_timeout_disabled() ? 0 : pbl_mba_boot_timeout_ms * 1000;
 
@@ -576,7 +576,7 @@ int pil_mss_reset_load_mba(struct pil_desc *pil)
 	dma_addr_t mba_dp_phys, mba_dp_phys_end;
 	int ret, count;
 	const u8 *data;
-	struct device *dma_dev = md->mba_mem_dev_fixed ?: pil->dev;
+	struct device *dma_dev = md->mba_mem_dev_fixed ?: &md->mba_mem_dev;
 
 	fw_name_p = drv->non_elf_image ? fw_name_legacy : fw_name;
 	pr_err("pil_mss_reset_load_mba: requesting firmware %s\n", fw_name_p);
@@ -598,12 +598,13 @@ int pil_mss_reset_load_mba(struct pil_desc *pil)
 
 	drv->mba_dp_size = SZ_1M;
 
-	pr_err("pil_mss_reset_load_mba: using dma_dev=%s\n",
-	       dev_name(dma_dev));
-
-	if (!dma_dev->coherent_dma_mask)
-		dma_dev->coherent_dma_mask =
-			DMA_BIT_MASK(sizeof(dma_addr_t) * 8);
+	/*
+	 * Set up DMA on the dummy device like 3.18 does: just set
+	 * coherent_dma_mask, do NOT call arch_setup_dma_ops() which
+	 * on 4.4 ARM sets arm_dma_ops and bypasses CMA, causing the
+	 * order-8 alloc_pages to block in compaction.
+	 */
+	dma_dev->coherent_dma_mask = DMA_BIT_MASK(sizeof(dma_addr_t) * 8);
 
 	init_dma_attrs(&md->attrs_dma);
 	dma_set_attr(DMA_ATTR_SKIP_ZEROING, &md->attrs_dma);
@@ -706,7 +707,7 @@ static int pil_msa_auth_modem_mdt(struct pil_desc *pil, const u8 *metadata,
 	s32 status;
 	int ret;
 	u64 val = is_timeout_disabled() ? 0 : modem_auth_timeout_ms * 1000;
-	struct device *dma_dev = drv->mba_mem_dev_fixed ?: pil->dev;
+	struct device *dma_dev = drv->mba_mem_dev_fixed ?: &drv->mba_mem_dev;
 	DEFINE_DMA_ATTRS(attrs);
 
 
@@ -831,7 +832,7 @@ static int pil_msa_mba_auth(struct pil_desc *pil)
 	struct modem_data *drv = dev_get_drvdata(pil->dev);
 	struct q6v5_data *q6_drv = container_of(pil, struct q6v5_data, desc);
 	int ret;
-	struct device *dma_dev = drv->mba_mem_dev_fixed ?: pil->dev;
+	struct device *dma_dev = drv->mba_mem_dev_fixed ?: &drv->mba_mem_dev;
 	s32 status;
 	u64 val = is_timeout_disabled() ? 0 : modem_auth_timeout_ms * 1000;
 

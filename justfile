@@ -65,7 +65,7 @@ flash:
 wait-serial:
     #!/usr/bin/env bash
     echo "Waiting for {{serial_tty}}..."
-    for i in $(seq 1 120); do
+    for i in $(seq 1 180); do
         if [ -e "{{serial_tty}}" ]; then
             sleep 2
             echo "Serial console ready on {{serial_tty}}"
@@ -107,7 +107,7 @@ dev-reboot:
         exit 1
     fi
     echo "Rebooting to fastboot..."
-    python3 scripts/serial-cmd.sh "/sbin/reboot-bootloader" "2" 2>/dev/null || true
+    python3 scripts/serial-cmd.sh "/usr/local/bin/reboot-bootloader" "2" 2>/dev/null || true
     sleep 5
     just wait-fastboot
 
