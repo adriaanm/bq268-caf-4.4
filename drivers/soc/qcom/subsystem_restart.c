@@ -678,12 +678,14 @@ static int subsys_start(struct subsys_device *subsys)
 								NULL);
 
 	init_completion(&subsys->err_ready);
+	pr_err("subsys_start: [%s] powerup\n", subsys->desc->name);
 	ret = subsys->desc->powerup(subsys->desc);
 	if (ret) {
 		notify_each_subsys_device(&subsys, 1, SUBSYS_POWERUP_FAILURE,
 									NULL);
 		return ret;
 	}
+	pr_err("subsys_start: [%s] powerup done\n", subsys->desc->name);
 	enable_all_irqs(subsys);
 
 	if (subsys->desc->is_not_loadable) {
@@ -691,7 +693,9 @@ static int subsys_start(struct subsys_device *subsys)
 		return 0;
 	}
 
+	pr_err("subsys_start: [%s] wait_for_err_ready\n", subsys->desc->name);
 	ret = wait_for_err_ready(subsys);
+	pr_err("subsys_start: [%s] err_ready ret=%d\n", subsys->desc->name, ret);
 	if (ret) {
 		/* pil-boot succeeded but we need to shutdown
 		 * the device because error ready timed out.
@@ -707,6 +711,7 @@ static int subsys_start(struct subsys_device *subsys)
 
 	notify_each_subsys_device(&subsys, 1, SUBSYS_AFTER_POWERUP,
 								NULL);
+	pr_err("subsys_start: [%s] complete, online\n", subsys->desc->name);
 	return ret;
 }
 
