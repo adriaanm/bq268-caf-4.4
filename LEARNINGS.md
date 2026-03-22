@@ -109,6 +109,8 @@ After successful PIL boot + auth, the modem Q6 starts running. It creates IPCRTR
 
 **Remaining:** Modem stalls very early — after IPCRTR/SSCTL but before any data/audio/QMI services. Need modem-side logs to identify which init task stalls. See `MODEM-INVESTIGATION.md` for full details.
 
+**ROOT CAUSE FOUND (2026-03-22):** Stock Android dmesg (`~/bq268-caf_msm-3.18/dmesg_stock.log`) reveals modem needs `rmt_storage` userspace daemon to serve EFS partition I/O (modemst1, modemst2, fsg, fsc). Without it, modem EFS init task stalls → watchdog fires. Stock shows modem completes init 0.5s after `rmt_storage` starts, and BAM 0x4044000 registers at t+7s. Need `rmt_storage` or equivalent for Alpine — rootfs project (`~/bq268-alpine`) is working on this.
+
 **Further investigation (2026-03-22):**
 - SMEM version confirmed 0x000B (no communication partitions) — not a layout mismatch
 - Modem DTS identical between 3.18 and 4.4 — not a DTS issue
@@ -151,6 +153,7 @@ t+55s   dog.c:1522 watchdog fires, SSR RELATED restart triggered
 | `SERIAL_MSM_SMD` | Already enabled | Creates /dev/smd* TTY devices; modem never creates data channels |
 | `MSM_SMD_PKT` | Ported from 3.18 | Source missing from 4.4 tree; creates /dev/smdpkt* devices |
 | `USB_CONFIGFS_F_DIAG` | Fixed | USB DIAG function for DIAG_CHAR over USB |
+| `UIO` + `UIO_MSM_SHAREDMEM` | Fixed | Creates /dev/uio0 (rmtfs), /dev/uio1-2 (rfsa). hyp_assign_phys fails (-5) but is non-fatal. |
 
 **CAF 4.4 stub pattern trap:** Many subsystem headers (`audio_notifier.h`, `smsm.h`, etc.) have `#ifdef CONFIG_XXX` with real implementation and `#else` with inline stubs returning `-ENODEV`. When a config is missing, the code compiles and links fine but does nothing. Always check the header for stub patterns when a subsystem fails silently.
 

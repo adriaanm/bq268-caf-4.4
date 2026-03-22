@@ -2,7 +2,7 @@
 
 ## High Priority — Modem Bringup
 
-- [ ] **Fix hyp_assign_phys failure for rmtfs shared memory** (0x87c00000, 917504 bytes). Returns -5. Compare `sharedmem_qmi.c` between 3.18 and 4.4 — 3.18 may not call `hyp_assign`. Skip or guard on MSM8909.
+- [x] **~~Fix hyp_assign_phys failure for rmtfs shared memory~~** — Error is already non-fatal (probe continues, UIO devices created). MSM8909 TZ doesn't implement `MEM_PROT_ASSIGN_ID` (0x16) but shared memory at 0x87c00000 is statically accessible by both HLOS and MSS. Both 3.18 and 4.4 have the same call; it likely also fails silently on stock. No fix needed.
 
 - [ ] **Write/port rmt_storage daemon for Alpine.** Serves modem EFS via `/dev/uio0` (rmtfs shared mem). Partitions: modemst1=p26, modemst2=p27, fsg=p3, fsc=p29. Check postmarketOS/Linaro `rmtfs` as starting point. Stock binary at `~/bq268-lineage/vendor/udotech/udosmart/proprietary/vendor/bin/rmt_storage`.
 
