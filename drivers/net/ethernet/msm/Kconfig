@@ -2,6 +2,13 @@
 # msm network device configuration
 #
 
+config MSM_RMNET_BAM
+	bool "RMNET BAM Driver"
+	depends on MSM_BAM_DMUX
+	help
+	  RMNET over BAM interface. Creates rmnet network
+	  interfaces for mobile data via BAM DMUX channels.
+
 config MSM_RMNET_MHI
 	bool "RMNET MHI Driver"
 	depends on MSM_MHI

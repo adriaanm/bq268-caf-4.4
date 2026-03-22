@@ -109,7 +109,7 @@ After successful PIL boot + auth, the modem Q6 starts running. It creates IPCRTR
 
 **Remaining:** Modem stalls very early — after IPCRTR/SSCTL but before any data/audio/QMI services. Need modem-side logs to identify which init task stalls. See `MODEM-INVESTIGATION.md` for full details.
 
-**ROOT CAUSE FOUND (2026-03-22):** Stock Android dmesg (`~/bq268-caf_msm-3.18/dmesg_stock.log`) reveals modem needs `rmt_storage` userspace daemon to serve EFS partition I/O (modemst1, modemst2, fsg, fsc). Without it, modem EFS init task stalls → watchdog fires. Stock shows modem completes init 0.5s after `rmt_storage` starts, and BAM 0x4044000 registers at t+7s. Need `rmt_storage` or equivalent for Alpine — rootfs project (`~/bq268-alpine`) is working on this.
+**ROOT CAUSE FOUND & FIXED (2026-03-22):** Modem needs `rmt_storage` userspace daemon to serve EFS partition I/O (modemst1, modemst2, fsg, fsc). Without it, modem EFS init task stalls → watchdog fires. Custom daemon at `~/bq268-alpine/tools/rmt_storage.c`. Bug found during testing: QMI RMTFS `phys_offset` in RW_IOVEC is buffer-relative (e.g. 0x200), not an absolute physical address — must add `shmem.phys_addr` base (0x87c00000). With fix, modem fully initializes: APR audio OPENED, all DIAG channels OPENED, DATA1-4/DS channels created, EFS reads+writes served, no watchdog crash.
 
 **Further investigation (2026-03-22):**
 - SMEM version confirmed 0x000B (no communication partitions) — not a layout mismatch
@@ -134,10 +134,22 @@ t+15s   IPCRTR channel OPENED both sides, SSCTL service (0x2b) registered
 t+55s   dog.c:1522 watchdog fires, SSR RELATED restart triggered
 ```
 
-**SMSM state observed:**
+**Modem boot timeline WITH rmt_storage (2026-03-22):**
+```
+t+0s    PIL boot starts
+t+3.5s  MBA auth complete
+t+4s    err_ready, subsys ONLINE, sysmon-qmi connected
+t+4s    apr_tal:Modem Is Up — APR audio channel OPENED
+t+4s    rmt_storage: 4x OPEN (modem_fs1, fs2, fsg, fsc), ALLOC_BUFF, reads
+t+5s    rmt_storage: full modem_fs2 read (1790 sectors), modem_fs1 write (1792 sectors)
+t+∞     Stable — no watchdog, DIAG channels OPENED, DATA1-4/DS OPENING (modem side)
+```
+
+**SMSM state (with rmt_storage):**
 - APPS (entry 0): `0x00001429` = SMSM_INIT | SMSM_SMDINIT | SMSM_RPCINIT | SMSM_TIMEWAIT | SMSM_PROC_AWAKE
 - Modem (entry 1): `0x08000009` = SMSM_INIT | SMSM_SMDINIT | bit27
-- Neither side sets SMSM_A2_POWER_CONTROL (bit 1) — BAM DMUX handshake never triggers
+- Neither side sets SMSM_A2_POWER_CONTROL (bit 1) — BAM DMUX handshake still not triggered
+- Modem opens DATA1-4/DATA11/DS channels (OPENING state) but AP BAM DMUX doesn't respond
 
 **Configs needed on 3.18 but missing/broken on 4.4:**
 
@@ -149,11 +161,15 @@ t+55s   dog.c:1522 watchdog fires, SSR RELATED restart triggered
 | `MSM_BAM_DMUX` | Ported from 3.18 | Source missing from 4.4 tree entirely |
 | `MEM_SHARE_QMI_SERVICE` | Fixed | DTS `allocate-boot-time` caused EDL |
 | `DIAG_CHAR` | Fixed | Built-in with `late_initcall` (EDL with `module_init`) |
-| `UIO_MSM_SHAREDMEM` | Not yet | Needs UIO=y, untested |
+| `UIO_MSM_SHAREDMEM` | Fixed | Creates /dev/uio0 (rmtfs). hyp_assign_phys fails (-5) but non-fatal. |
 | `SERIAL_MSM_SMD` | Already enabled | Creates /dev/smd* TTY devices; modem never creates data channels |
 | `MSM_SMD_PKT` | Ported from 3.18 | Source missing from 4.4 tree; creates /dev/smdpkt* devices |
 | `USB_CONFIGFS_F_DIAG` | Fixed | USB DIAG function for DIAG_CHAR over USB |
 | `UIO` + `UIO_MSM_SHAREDMEM` | Fixed | Creates /dev/uio0 (rmtfs), /dev/uio1-2 (rfsa). hyp_assign_phys fails (-5) but is non-fatal. |
+| `RMNET_DATA` | Added | MAP protocol network driver over BAM DMUX. Was `=y` on 3.18. |
+| `USB_BAM` | Added | SPS peripheral-to-peripheral DMA for USB ↔ modem. Depends on SPS + USB_GADGET. |
+| `MSM_RMNET_BAM` | N/A | Existed in 3.18 but removed in 4.4. Replaced by `MSM_BAM_DMUX` + `RMNET_DATA`. |
+| `USB_CONFIGFS_RMNET_BAM` | Blocked | 4.4 USB RMNET gadget depends on `IPA` (Internet Packet Accelerator) — too heavyweight for MSM8909. |
 
 **CAF 4.4 stub pattern trap:** Many subsystem headers (`audio_notifier.h`, `smsm.h`, etc.) have `#ifdef CONFIG_XXX` with real implementation and `#else` with inline stubs returning `-ENODEV`. When a config is missing, the code compiles and links fine but does nothing. Always check the header for stub patterns when a subsystem fails silently.
 
@@ -164,6 +180,25 @@ t+55s   dog.c:1522 watchdog fires, SSR RELATED restart triggered
 **BAM DMUX missing from CAF 4.4:** The `bam_dmux.c` source file does not exist in the CAF 4.4 tree at all — not disabled, not renamed, just absent. The DTS node `qcom,bam_dmux@4044000` still exists (orphaned). CAF apparently dropped it, perhaps expecting newer data path (IPA or mainline `qcom_bam_dmux` from 5.17+). Had to copy all 3 files from 3.18 — compiled without changes.
 
 **`qcom,allocate-boot-time` DTS trap:** The memshare DTS node has `qcom,allocate-boot-time` which calls `hyp_assign_phys()` (SCM hypervisor call) during `platform_device_add()`. On MSM8909, SCM may not be ready this early → kernel panic before console → EDL. Removing the property defers allocation to QMI runtime request. The modem can still request shared memory dynamically.
+
+**BAM DMUX vs SMD DATA channels — completely separate subsystems:** BAM DMUX uses SPS/BAM DMA pipes at 0x4044000. SMD DATA channels (DATA1-4, DATA11, DS visible in `/sys/kernel/debug/smd/ch`) are shared-memory ring buffers used for AT commands, QMI control, PPP. They are unrelated to BAM DMUX. The modem opening DATA1-4 in SMD has nothing to do with BAM DMUX data path. BAM DMUX does not call `smd_named_open_on_edge()` anywhere.
+
+**BAM DMUX vs QMI control — also independent:** `qmuxd` opens QMI control channels (`DATA5_CNTL` via `/dev/smdcntl0`) but does NOT trigger A2_POWER_CONTROL. postmarketOS gets BAM DMUX working on MSM8916 without qmuxd, dpmQmiMgr, or netmgrd. The `memshare hyp_assign_phys` failure is also NOT the cause — stock 3.18 has the same failure and BAM works fine.
+
+**`msm_rmnet_bam.c` removed from CAF 4.4:** On 3.18, `drivers/net/ethernet/msm/msm_rmnet_bam.c` consumed `bam_dmux_ch_N` platform devices (added by `handle_bam_mux_cmd_open()` in bam_dmux.c) and created `rmnet0`-`rmnet7` network interfaces. This driver is completely absent from CAF 4.4. The 4.4 tree only has `u_bam.c` (USB gadget BAM) as a BAM DMUX consumer, which requires the Android USB rmnet gadget. Must port `msm_rmnet_bam.c` from 3.18 for Alpine.
+
+**Mainline BAM DMUX (Linux 5.17+, Stephan Gerhold):** Clean rewrite as `drivers/net/wwan/qcom_bam_dmux.c`. Uses `qcom_smem_state` + IRQs instead of SMSM callbacks. Creates `wwan%d` interfaces directly from BAM DMUX CMD_OPEN commands — no intermediate platform devices. The modem sets power control autonomously after its internal init.
+
+**SMSM A2_POWER_CONTROL — modem A2 task alive but not activating:** Modem never sets bit 1 of SMSM_MODEM_STATE despite full init (APR up, DIAG up, EFS served). BAM DMUX SMSM callbacks confirmed registered. All stock Android daemons (qmuxd, dpmQmiMgr, netmgrd, irsc_util) confirmed unnecessary by postmarketOS. Forcing BAM init from AP side via debugfs (`echo 1 > /sys/kernel/debug/bam_dmux/force_a2pc`) successfully registers BAM 0x04044000 (6 pipes, ver 0x25) but immediately crashes the modem: `a2_power.c:2783:A2 Assertion Failed`. This confirms: (1) BAM hardware works, (2) modem A2 task is alive and monitoring BAM state, (3) A2 deliberately does not set A2_POWER_CONTROL — some internal precondition is unmet. APPS SMSM state matches stock (`0x00001429`). Needs modem-side DIAG logging to identify what A2 is waiting for.
+
+**IPC Router Security (`CONFIG_IPC_ROUTER_SECURITY`) must be disabled:** On stock Android, `irsc_util` runs at boot with `/vendor/etc/sec_config` and calls `IPC_ROUTER_IOCTL_CONFIG_SEC_RULES` to configure security policies, then signals `irsc_completion`. Without this, `wait_for_irsc_completion()` in `ipc_router_socket.c:347` blocks **forever** (30s timeout loop, infinite retry) on any `sendto()` from a CLIENT_PORT. This would block all userspace QMI clients (qmicli, ModemManager, libqmi). We don't have `irsc_util` or `sec_config` for Alpine, so disable the config entirely — makes the wait a no-op.
+
+**Modem userspace architecture (postmarketOS equivalent):**
+- `rmt_storage` — serves modem EFS partitions (custom, in `~/bq268-alpine`)
+- `libqmi` / `qmi-utils` — QMI client tools (Alpine `community` repo). On CAF 4.4 with AF_MSM_IPC (not qrtr), needs `libqipcrtr4msmipc` adapter or `libsmdpkt_wrapper`.
+- `ModemManager` — high-level modem management daemon (uses libqmi)
+- `smdcntl0` → SMD channel `DATA5_CNTL` (primary QMI control)
+- `smdcntl8` → SMD channel `DATA40_CNTL` (secondary QMI control)
 
 **Subsystem fd lifecycle:** Opening `/dev/subsys_modem` calls `subsystem_get()` which boots the modem. When the fd closes, `subsystem_put()` shuts it down. On Android, rild holds the fd permanently. On Alpine, use: `sleep 999999 < /dev/subsys_modem &`. If the holder process dies (e.g., modem SSR crashes it), the modem shuts down.
 

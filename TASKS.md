@@ -4,9 +4,15 @@
 
 - [x] **~~Fix hyp_assign_phys failure for rmtfs shared memory~~** — Error is already non-fatal (probe continues, UIO devices created). MSM8909 TZ doesn't implement `MEM_PROT_ASSIGN_ID` (0x16) but shared memory at 0x87c00000 is statically accessible by both HLOS and MSS. Both 3.18 and 4.4 have the same call; it likely also fails silently on stock. No fix needed.
 
-- [ ] **Write/port rmt_storage daemon for Alpine.** Serves modem EFS via `/dev/uio0` (rmtfs shared mem). Partitions: modemst1=p26, modemst2=p27, fsg=p3, fsc=p29. Check postmarketOS/Linaro `rmtfs` as starting point. Stock binary at `~/bq268-lineage/vendor/udotech/udosmart/proprietary/vendor/bin/rmt_storage`.
+- [x] **~~Write/port rmt_storage daemon for Alpine.~~** Done in `~/bq268-alpine/tools/rmt_storage.c`. Serves modem EFS via `/dev/uio0` (rmtfs shared mem). Bug found: `phys_offset` in RW_IOVEC is buffer-relative, not absolute — fixed by adding `shmem.phys_addr` base.
 
-- [ ] **Test modem with rmt_storage running.** Expect modem to progress past watchdog stall, create DIAG/DATA/APR channels, set SMSM_A2_POWER_CONTROL (BAM init), register full QMI services. Stock dmesg shows `apr_tal:Modem Is Up` at t+0.5s and BAM 0x4044000 at t+7s after rmt_storage starts.
+- [x] **~~Test modem with rmt_storage running.~~** Modem fully initializes: APR audio OPENED, DIAG channels OPENED, DATA1-4/DS channels created (modem OPENING, AP CLOSED). No watchdog crash. EFS read+write confirmed working.
+
+- [ ] **BAM DMUX data path handshake.** SMSM A2_POWER_CONTROL never set by modem. BAM hardware confirmed working (force init registers BAM 0x04044000, 6 pipes, ver 0x25). But forcing it crashes modem: `a2_power.c:2783:A2 Assertion Failed` — A2 task is alive but has unmet internal precondition. Ruled out: all AP daemons, SIM card, IPC_ROUTER_SECURITY, memshare, SMSM state. Needs modem-side DIAG logs to identify what A2 is waiting for.
+
+- [x] **~~Port `msm_rmnet_bam.c` from 3.18.~~** Done. Copied from 3.18, adapted `net_device_stats` to `dev->stats`, stubbed flow control ioctls (need `CONFIG_NET_SCHED`). Driver registers platform drivers for `bam_dmux_ch_0`-`bam_dmux_ch_20` at boot. `CONFIG_USB_BAM` crashes at probe — disabled.
+
+- [ ] **Get modem DIAG logs working.** DIAG SMD channels are OPENED (DIAG, DIAG_CMD, DIAG_CNTL, DIAG_2, DIAG_2_CMD). Need to capture modem-side logs to understand why A2 task doesn't set SMSM A2_POWER_CONTROL. Kernel has `CONFIG_DIAG_CHAR=y` (with `late_initcall` fix). Options: (1) Use `/dev/diag` + DIAG userspace tool to extract modem F3 messages, (2) Check `~/bq268-lineage` for `ssr_diag` or DIAG tools, (3) Use postmarketOS `diag-router` package. Key: modem's `a2_power.c` has the logic — DIAG F3 messages from A2 task should show what precondition blocks A2_POWER_CONTROL.
 
 ## Normal Priority
 

@@ -2485,6 +2485,10 @@ static void bam_dmux_smsm_cb(void *priv, uint32_t old_state, uint32_t new_state)
 	static int last_processed_state;
 	int rcu_id;
 
+	pr_err("%s: SMSM cb fired: 0x%08x -> 0x%08x (A2_PC=%d, initialized=%d)\n",
+		__func__, old_state, new_state,
+		!!(new_state & SMSM_A2_POWER_CONTROL), bam_mux_initialized);
+
 	rcu_id = srcu_read_lock(&bam_dmux_srcu);
 	mutex_lock(&smsm_cb_lock);
 	bam_dmux_power_state = new_state & SMSM_A2_POWER_CONTROL ? 1 : 0;
@@ -2807,6 +2811,7 @@ static int bam_dmux_probe(struct platform_device *pdev)
 		pr_err("%s: smsm cb register failed, rc: %d\n", __func__, rc);
 		return -ENOMEM;
 	}
+	pr_err("%s: smsm A2_POWER_CONTROL cb registered OK\n", __func__);
 
 	rc = bam_ops->smsm_state_cb_register_ptr(SMSM_MODEM_STATE,
 			SMSM_A2_POWER_CONTROL_ACK,
@@ -2824,6 +2829,16 @@ static int bam_dmux_probe(struct platform_device *pdev)
 		for (rc = 0; rc < BAM_DMUX_NUM_CHANNELS; ++rc)
 			platform_device_put(bam_ch[rc].pdev);
 		return -ENOMEM;
+	}
+	pr_err("%s: smsm A2_POWER_CONTROL_ACK cb registered OK\n", __func__);
+
+	{
+		uint32_t modem_state =
+			bam_ops->smsm_get_state_ptr(SMSM_MODEM_STATE);
+		pr_err("%s: modem SMSM state at probe: 0x%08x "
+			"(A2_POWER_CONTROL=%d)\n", __func__,
+			modem_state,
+			!!(modem_state & SMSM_A2_POWER_CONTROL));
 	}
 
 	if (bam_ops->smsm_get_state_ptr(SMSM_MODEM_STATE) &
