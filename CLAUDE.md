@@ -12,10 +12,13 @@ Port the MSM8909 BQ268 walkie-talkie from a working 3.18 CAF kernel to 4.4 CAF. 
 
 ## Reference
 
-- **3.18 working kernel**: `~/bq268-caf_msm-3.18` (read-only reference — request changes through user)
+- **3.18 CAF kernel**: `~/bq268-caf_msm-3.18` (read-only reference — request changes through user). Note: 3.18 modem never tested with Alpine; stock kernel is Android-only.
 - **Alpine rootfs**: `~/bq268-alpine` (read-only reference — request changes through user)
 - **Toolchain**: GCC 7.4.1 at `/opt/toolchains/gcc-linaro-7.4.1-2019.02-x86_64_arm-linux-gnueabihf/`
 - **Rootfs**: Alpine 3.21.3 on eMMC partition 36 (built/managed by `~/bq268-alpine`)
+- **Bootloader (aboot)**: `~/bq268-aboot` — LK source + decompiled stock aboot + docs (memory layout, RPM/DDR, TZ interface, boot analysis)
+- **EDL tool + device dump**: `~/bq268-edl` — Go-based EDL backup/restore tool; `dump/` has all eMMC partitions including stock `boot.bin`
+- **Lineage/Android ref**: `~/bq268-lineage` — LineageOS/Android reference tree
 - **Learnings & architecture decisions**: see `LEARNINGS.md`
 
 ## Reproducibility
@@ -89,7 +92,7 @@ When porting a subsystem from 3.18 to 4.4:
 | COMMON_CLK_MSM only | Legacy CAF clock framework; mainline COMMON_CLK conflicts |
 | USB configfs | 4.4 removed USB_G_ANDROID; Alpine handles configfs |
 | Non-PSCI idle | MSM8909 TZ has no PSCI; ported SCM-based idle from 3.18 |
-| SMP via DT | enable-method + ACC/SAW nodes (3.18 used machine smp_ops). **BROKEN**: only CPU 0 comes up. |
+| SMP via DT | enable-method + ACC/SAW nodes (3.18 used machine smp_ops). All 4 CPUs online. |
 | eMMC rootfs | Alpine on p36, no initramfs. Firmware at `/lib/firmware/` (pre-extracted from modem partition). |
 | GCC 7.4 | GCC 8+ breaks BUILD_BUG_ON; GCC 4.9 works but old |
 | lpm-levels disabled | Breaks timer in idle; sleep hangs. WFI via default arch_cpu_idle works. |
@@ -103,7 +106,8 @@ When porting a subsystem from 3.18 to 4.4:
 | SMP broken | **Resolved** | Fixed: `scm_set_boot_addr_mc()` + 3.18 `arm_release_secondary` register sequence. All 4 CPUs online. |
 | WiFi (WCNSS) | **Resolved** | Working: wlan0 up, IPv4+IPv6, internet connectivity. Prima wlan.ko module. |
 | SPMI child enumeration | **Resolved** | Fixed: 4.4-style DT bindings + CONFIG_MFD_SPMI_PMIC. |
-| Modem Q6 stalled init | **Open** | PIL boot + auth succeeds, but Q6 watchdog fires after ~40s. APR never connects. Triggering modem also crashes USB gadget. `try_module_get` oops on corrupted `subsys->owner`. |
-| sleep() hangs with lpm-levels | **Workaround**: lpm-levels disabled in DTS | Timer dies when CPU enters idle via lpm-levels. May improve with SMP. |
+| Modem Q6 stalled init | **Open** | PIL boot + auth OK. Q6 creates IPCRTR + SSCTL, but never creates DIAG/DATA/APR channels or QMI services. Watchdog at ~40-60s. All AP-side drivers enabled (DIAG, BAM_DMUX, smd_pkt, QMI, MEM_SHARE, QDSP6_SSR). SMEM v0x000B confirmed (same as 3.18). SMD/SMSM code identical. Firmware verified matching modem partition. Modem stall is internal — not caused by missing AP-side SMD handlers. Modem firmware strings suggest A2 task blocked waiting for "apps action". |
+| WCD codec regmap | **Open** | msm8x16-wcd uses old .read/.write callbacks, not regmap. `snd_soc_cache_sync()` crashes on NULL regmap in 4.4. Guarded with NULL check (skips sync). Blocks audio, not modem. |
+| sleep() hangs with lpm-levels | **Workaround**: lpm-levels disabled in DTS | Timer dies when CPU enters idle via lpm-levels. |
 | Bus scaling crashes | **Workaround**: QCOM_BUS_SCALING + BIMC_BWMON disabled | Kernel hangs before init when enabled. Needs DT or driver debug. |
 | Broadcast timer (arch_mem_timer) | **Open** | Selected as broadcast device, in oneshot mode, but 0 interrupts ever. Blocks deep idle. |

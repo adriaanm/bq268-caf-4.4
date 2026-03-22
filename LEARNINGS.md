@@ -95,9 +95,74 @@ After `pil_boot` completes, `subsystem_restart.c` calls `wait_for_err_ready()`. 
 
 ### Modem Q6 watchdog — stalled initialization (open)
 
-After successful PIL boot + auth, the modem Q6 starts running but its internal watchdog fires after ~40s: `dog.c:1522:Watchdog detects stalled initialization`. The Q6 DSP can't complete init — likely waiting for AP-side resources. `apr_register: Modem is not Up` confirms SMD/APR link never establishes. Triggering modem PIL also crashes the USB gadget (serial drops immediately), suggesting shared power domain interference.
+After successful PIL boot + auth, the modem Q6 starts running. It creates IPCRTR SMD channel (opens both sides) and registers SSCTL QMI service (0x2b). But it never creates APR audio channels (`apr_audio_svc`, `apr_voice_svc`) or full QMI services (NAS, DMS, WDS). Its internal watchdog fires after ~55s: `dog.c:1522:Watchdog detects stalled initialization`.
 
-**Investigation needed**: The modem crash with IPC_ROUTER enabled causes a system reboot (even with RELATED restart level). The `try_module_get` oops on corrupted `subsys->owner` (value=1) needs root-causing. Also check if `QCOM_BUS_SCALING` (currently disabled due to crash) is required for modem.
+**Fixes applied (2026-03-22):**
+- `CONFIG_MSM_QDSP6_SSR` + `CONFIG_MSM_QDSP6_NOTIFIER`: `SND_SOC_MSM8909` didn't select these (other machine drivers do). Without them, `audio_notifier_register()` was a `-ENODEV` stub. APR never learned modem was online.
+- `CONFIG_MSM_QMI_INTERFACE`: Provides kernel QMI framework. Extends modem life from 41s→55s (sysmon-qmi connects to modem's SSCTL service).
+- WCD codec crash guard: `adsp_state_callback` calls `regcache_sync(NULL)` — codec uses old `.read`/`.write` callbacks, not regmap. Guarded with NULL check.
+- Subsystem fd lifecycle: `cat /dev/subsys_modem` exits immediately → modem shuts down. Use `sleep 999999 < /dev/subsys_modem &` to hold fd.
+- BAM DMUX: Ported from 3.18. Probes, registers SMSM callbacks. Modem never reaches A2_POWER_CONTROL stage.
+- MEM_SHARE_QMI_SERVICE: Fixed EDL crash by removing `qcom,allocate-boot-time` from DTS (caused early `hyp_assign_phys()` before SCM init). Probes and registers QMI service 0x34.
+
+**Eliminated hypotheses:** QPIC clock (was NULL in 3.18 too), DTS differences (identical), PIL boot sequence (identical), BAM DMUX (probed, modem doesn't reach handshake), MEM_SHARE (probed, no effect).
+
+**Remaining:** Modem stalls very early — after IPCRTR/SSCTL but before any data/audio/QMI services. Need modem-side logs to identify which init task stalls. See `MODEM-INVESTIGATION.md` for full details.
+
+**Further investigation (2026-03-22):**
+- SMEM version confirmed 0x000B (no communication partitions) — not a layout mismatch
+- Modem DTS identical between 3.18 and 4.4 — not a DTS issue
+- Modem firmware on rootfs verified identical to modem partition — not corruption
+- SMD core code (msm_smd.c) functionally identical between 3.18 and 4.4
+- DIAG_CHAR enabled (module) — modem never creates DIAG SMD channels (stalls before that)
+- MSM_SMD_PKT ported from 3.18 — creates /dev/smdpkt* devices but modem never creates those channels either
+- SMSM masks show BAM_DMUX correctly registered for A2_POWER_CONTROL — modem never sets this bit
+- 3.18 kernel modem test inconclusive: device hard-locked when modem was booted on 3.18+Alpine
+- Modem firmware strings show A2 task waits for "apps action" — possible chicken-and-egg with BAM init
+
+**Observed modem boot timeline (empirical):**
+```
+t+0s    PIL boot starts (proxy votes, firmware load)
+t+4s    MBA auth complete (STATUS_AUTH_COMPLETE=4)
+t+5s    err_ready SMP2P received, subsys ONLINE
+t+5s    APR tries apr_tal_open → times out after 5s (no apr_audio_svc channel)
+t+10s   Second apr_tal_open timeout
+t+15s   IPCRTR channel OPENED both sides, SSCTL service (0x2b) registered
+        (only 1 QMI service, no NAS/DMS/WDS/VOICE)
+t+55s   dog.c:1522 watchdog fires, SSR RELATED restart triggered
+```
+
+**SMSM state observed:**
+- APPS (entry 0): `0x00001429` = SMSM_INIT | SMSM_SMDINIT | SMSM_RPCINIT | SMSM_TIMEWAIT | SMSM_PROC_AWAKE
+- Modem (entry 1): `0x08000009` = SMSM_INIT | SMSM_SMDINIT | bit27
+- Neither side sets SMSM_A2_POWER_CONTROL (bit 1) — BAM DMUX handshake never triggers
+
+**Configs needed on 3.18 but missing/broken on 4.4:**
+
+| Config | Status | Notes |
+|--------|--------|-------|
+| `MSM_QDSP6_SSR` | Fixed | Stub returned -ENODEV without it |
+| `MSM_QDSP6_NOTIFIER` | Fixed | Required by SSR for audio notification |
+| `MSM_QMI_INTERFACE` | Fixed | Extends modem life 41→55s |
+| `MSM_BAM_DMUX` | Ported from 3.18 | Source missing from 4.4 tree entirely |
+| `MEM_SHARE_QMI_SERVICE` | Fixed | DTS `allocate-boot-time` caused EDL |
+| `DIAG_CHAR` | Fixed | Built-in with `late_initcall` (EDL with `module_init`) |
+| `UIO_MSM_SHAREDMEM` | Not yet | Needs UIO=y, untested |
+| `SERIAL_MSM_SMD` | Already enabled | Creates /dev/smd* TTY devices; modem never creates data channels |
+| `MSM_SMD_PKT` | Ported from 3.18 | Source missing from 4.4 tree; creates /dev/smdpkt* devices |
+| `USB_CONFIGFS_F_DIAG` | Fixed | USB DIAG function for DIAG_CHAR over USB |
+
+**CAF 4.4 stub pattern trap:** Many subsystem headers (`audio_notifier.h`, `smsm.h`, etc.) have `#ifdef CONFIG_XXX` with real implementation and `#else` with inline stubs returning `-ENODEV`. When a config is missing, the code compiles and links fine but does nothing. Always check the header for stub patterns when a subsystem fails silently.
+
+**DIAG_CHAR `module_init` causes EDL:** `CONFIG_DIAG_CHAR=y` with stock `module_init(diagchar_init)` causes EDL (hard crash into Emergency Download Mode). The crash is a PMIC reset, not a normal kernel panic — `panic=5` doesn't trigger reboot. Root cause: init ordering issue — diagchar_init at `device_initcall` level runs before USB subsystem or another dependency is fully ready. **Fix**: Change to `late_initcall(diagchar_init)`. As a module (=m), it works fine since loading happens after boot.
+
+**smd_pkt missing from CAF 4.4:** Like bam_dmux, `msm_smd_pkt.c` is absent from the CAF 4.4 tree — DTS nodes exist (`qcom,smdpkt`) but no driver. Copied from 3.18, compiled without changes. Creates `/dev/smdpkt*` and `/dev/smdcntl*` char devices for userspace QMI tools.
+
+**BAM DMUX missing from CAF 4.4:** The `bam_dmux.c` source file does not exist in the CAF 4.4 tree at all — not disabled, not renamed, just absent. The DTS node `qcom,bam_dmux@4044000` still exists (orphaned). CAF apparently dropped it, perhaps expecting newer data path (IPA or mainline `qcom_bam_dmux` from 5.17+). Had to copy all 3 files from 3.18 — compiled without changes.
+
+**`qcom,allocate-boot-time` DTS trap:** The memshare DTS node has `qcom,allocate-boot-time` which calls `hyp_assign_phys()` (SCM hypervisor call) during `platform_device_add()`. On MSM8909, SCM may not be ready this early → kernel panic before console → EDL. Removing the property defers allocation to QMI runtime request. The modem can still request shared memory dynamically.
+
+**Subsystem fd lifecycle:** Opening `/dev/subsys_modem` calls `subsystem_get()` which boots the modem. When the fd closes, `subsystem_put()` shuts it down. On Android, rild holds the fd permanently. On Alpine, use: `sleep 999999 < /dev/subsys_modem &`. If the holder process dies (e.g., modem SSR crashes it), the modem shuts down.
 
 ## WiFi (WCNSS) — Working
 
@@ -151,3 +216,6 @@ GCC 7.4.1 (Linaro 2019.02). GCC 8+ breaks `BUILD_BUG_ON`/`compiletime_assert` �
 - fbtft: `par->bl_dev` (not `fb_info`), removed `select FB_BACKLIGHT`
 - soc/qcom Makefile: added `sysmon.o` for `CONFIG_MSM_SYSMON_COMM`
 - APR: `SUBSYS_UP` → `SUBSYS_LOADED` in apr_v3.c (MSM8909 has no LPASS)
+- msm8x16-wcd.c: NULL guard in `adsp_state_callback` and `msm8x16_wcd_device_up` for missing regmap
+- bam_dmux.c: ported from 3.18 (not in CAF 4.4 tree)
+- memshare DTS: removed `qcom,allocate-boot-time` (crashes early boot via `hyp_assign_phys`)

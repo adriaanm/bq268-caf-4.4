@@ -1010,7 +1010,11 @@ bool smem_initialized_check(void)
 	 * cannot be properly initialized.
 	 */
 	ver = smem->version[MODEM_SBL_VERSION_INDEX];
+	pr_info("smem: SBL version 0x%x (idx %d)\n", ver,
+		MODEM_SBL_VERSION_INDEX);
 	if (ver == SMEM_COMM_PART_VERSION << 16) {
+		pr_info("smem: using communication partition (v0x%x)\n",
+			SMEM_COMM_PART_VERSION);
 		use_comm_partition = true;
 	} else if (ver != SMEM_VERSION << 16) {
 		pr_err("%s: SBL version not correct 0x%x\n",

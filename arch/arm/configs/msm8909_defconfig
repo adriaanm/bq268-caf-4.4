@@ -64,6 +64,7 @@ CONFIG_GPIO_SYSFS=y
 
 # Serial console
 CONFIG_SERIAL_MSM_SMD=y
+CONFIG_MSM_SMD_PKT=y
 
 # Networking (minimal, WiFi/WCNSS disabled for bring-up)
 CONFIG_NET=y
@@ -98,6 +99,7 @@ CONFIG_USB_CHIPIDEA_UDC=y
 CONFIG_USB_CONFIGFS=y
 CONFIG_USB_CONFIGFS_ACM=y
 CONFIG_USB_CONFIGFS_ECM=y
+CONFIG_USB_CONFIGFS_F_DIAG=y
 CONFIG_USB_MSM_OTG=y
 CONFIG_EXTCON=y
 
@@ -288,8 +290,8 @@ CONFIG_WIRELESS=y
 CONFIG_CFG80211=y
 CONFIG_MAC80211=y
 
-# DIAG disabled for bring-up
-# CONFIG_DIAG_CHAR is not set
+# DIAG: EDL when =y with module_init, use late_initcall patch
+CONFIG_DIAG_CHAR=y
 
 # RTC
 CONFIG_RTC_CLASS=y

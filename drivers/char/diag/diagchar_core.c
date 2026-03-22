@@ -3527,5 +3527,5 @@ static void diagchar_exit(void)
 	printk(KERN_INFO "done diagchar exit\n");
 }
 
-module_init(diagchar_init);
+late_initcall(diagchar_init);
 module_exit(diagchar_exit);
