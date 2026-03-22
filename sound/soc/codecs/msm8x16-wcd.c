@@ -5536,6 +5536,12 @@ static int msm8x16_wcd_device_up(struct snd_soc_codec *codec)
 		snd_soc_codec_get_drvdata(codec);
 	int ret = 0;
 
+	if (!codec->component.regmap) {
+		dev_warn(codec->dev, "%s: regmap not ready, skipping\n",
+			 __func__);
+		return 0;
+	}
+
 	dev_dbg(codec->dev, "%s: device up!\n", __func__);
 
 	snd_soc_dapm_mutex_lock(snd_soc_codec_get_dapm(codec));
@@ -5593,6 +5599,11 @@ static int adsp_state_callback(struct notifier_block *nb, unsigned long value,
 {
 	bool timedout;
 	unsigned long timeout;
+
+	if (!registered_codec) {
+		pr_debug("%s: codec not registered yet\n", __func__);
+		return NOTIFY_OK;
+	}
 
 	if (value == SUBSYS_BEFORE_SHUTDOWN)
 		msm8x16_wcd_device_down(registered_codec);
