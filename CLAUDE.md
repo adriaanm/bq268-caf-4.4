@@ -65,15 +65,7 @@ Common causes of silent drops: parent menu disabled (e.g. `INPUT_MISC`), missing
 
 ## Workflow: Tasks
 
-Tasks track what needs doing. They live in git notes on HEAD.
-
-- **`just tasks`** — show current tasks
-- **`just task-add "description"`** — add a new task
-- **`just task-start "pattern"`** — mark in-progress
-- **`just task-done "pattern"`** — mark done
-- **`just experiments`** — show experiment log with tasks
-
-When starting work, run `just tasks` first. When finishing a task, run `just task-done`. When discovering new work, run `just task-add`. Keep the list current — move tasks forward when committing.
+Tasks live in `TASKS.md`. Check it at the start of each session. Mark items `[x]` when done, add new items as discovered.
 
 ## Workflow: Porting from 3.18
 
