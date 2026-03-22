@@ -293,6 +293,10 @@ CONFIG_MAC80211=y
 # DIAG: EDL when =y with module_init, use late_initcall patch
 CONFIG_DIAG_CHAR=y
 
+# UIO for rmt_storage (modem EFS access via shared memory)
+CONFIG_UIO=y
+CONFIG_UIO_MSM_SHAREDMEM=y
+
 # RTC
 CONFIG_RTC_CLASS=y
 CONFIG_RTC_DRV_QPNP=y
