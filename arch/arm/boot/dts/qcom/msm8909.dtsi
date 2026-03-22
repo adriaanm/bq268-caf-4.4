@@ -1880,7 +1880,8 @@
 			compatible = "qcom,memshare-peripheral";
 			qcom,peripheral-size = <0x200000>;
 			qcom,client-id = <0>;
-			qcom,allocate-boot-time;
+			/* qcom,allocate-boot-time removed: causes early
+			 * hyp_assign_phys crash before SCM is ready */
 			label = "modem";
 		};
 
