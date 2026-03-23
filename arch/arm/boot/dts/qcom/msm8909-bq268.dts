@@ -653,9 +653,9 @@
 		            <&msm_gpio 97 0x00>;
 		linux,keymap = <0x00010067	/* row0,col1: KEY_UP     */
 		                0x0101006c	/* row1,col1: KEY_DOWN   */
-		                0x0002009e	/* row0,col2: KEY_BACK   */
+		                0x00020001	/* row0,col2: KEY_ESC    */
 		                0x0102006a	/* row1,col2: KEY_RIGHT  */
-		                0x00000161	/* row0,col0: KEY_SELECT */
+		                0x0000001c      /* row0,col0: KEY_ENTER  */
 		                0x01000069>;	/* row1,col0: KEY_LEFT   */
 	};
 };
