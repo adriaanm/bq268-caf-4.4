@@ -464,12 +464,20 @@ struct apr_svc *apr_register(char *dest, char *svc_name, apr_fn svc_fn,
 					__func__);
 				return NULL;
 			}
-			pr_debug("%s: Wait for modem to bootup\n", __func__);
-			rc = apr_wait_for_device_up(APR_DEST_MODEM);
-			if (rc == 0) {
-				pr_err("%s: Modem is not Up\n", __func__);
-				return NULL;
-			}
+			/*
+			 * Fail immediately instead of blocking. Stock CAF
+			 * code called apr_wait_for_device_up() here with a
+			 * 1s timeout, expecting modem PIL to be racing with
+			 * sound card probe (Android boots modem early). On
+			 * Alpine, modem starts from userspace well after
+			 * init, so the wait never succeeds — it just adds
+			 * ~8s to boot (WCD codec retries MCLK via AFE for
+			 * each digital register read during DAPM init).
+			 * Modem-up notification will re-trigger APR
+			 * registration when modem actually comes online.
+			 */
+			pr_debug("%s: Modem not up, skipping wait\n", __func__);
+			return NULL;
 		}
 		pr_debug("%s: modem Up\n", __func__);
 	}
