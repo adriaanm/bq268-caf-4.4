@@ -9,7 +9,7 @@
 
 - [x] **~~Test modem with rmt_storage running.~~** Modem fully initializes: APR audio OPENED, DIAG channels OPENED, DATA1-4/DS channels created (modem OPENING, AP CLOSED). No watchdog crash. EFS read+write confirmed working.
 
-- [ ] **BAM DMUX data path handshake.** SMSM A2_POWER_CONTROL never set by modem. BAM hardware confirmed working (force init registers BAM 0x04044000, 6 pipes, ver 0x25). But forcing it crashes modem: `a2_power.c:2783:A2 Assertion Failed` — A2 task is alive but has unmet internal precondition. Ruled out: all AP daemons, SIM card, IPC_ROUTER_SECURITY, memshare, SMSM state. Needs modem-side DIAG logs to identify what A2 is waiting for.
+- [ ] **BAM DMUX data path handshake.** SMSM A2_POWER_CONTROL never set by modem. BAM hardware confirmed working (force init registers BAM 0x04044000, 6 pipes, ver 0x25). But forcing it crashes modem: `a2_power.c:2783:A2 Assertion Failed`. **Key finding (2026-03-23):** Modem defaults to `shutting-down` operating mode — must send `qmicli --dms-set-operating-mode=online` (stock Android's rild does this). After setting online: RF works (UMTS scan, sees MCC228/MNC3 Swisscom), NAS status `limited` (no SIM). A2 still not set — may require PS-attached state (needs SIM). Next: test with SIM card inserted.
 
 - [x] **~~Port `msm_rmnet_bam.c` from 3.18.~~** Done. Copied from 3.18, adapted `net_device_stats` to `dev->stats`, stubbed flow control ioctls (need `CONFIG_NET_SCHED`). Driver registers platform drivers for `bam_dmux_ch_0`-`bam_dmux_ch_20` at boot. `CONFIG_USB_BAM` crashes at probe — disabled.
 
@@ -17,9 +17,23 @@
 
 ## Normal Priority
 
-- [ ] Fix WCD codec regmap for 4.4 ASoC cache API — msm8x16-wcd uses old `.read`/`.write` callbacks, not regmap. `snd_soc_cache_sync()` needs regmap in 4.4. Blocks audio, not modem.
+- [x] ~~Fix WCD codec regmap for 4.4 ASoC cache API~~ Added regmap wrapper (REGCACHE_FLAT) that delegates to existing SPMI/AHB read/write. Sound card `msm8909-snd-card` registers, WCD codec probes without crash, ALSA devices created. Audio playback needs `alsa-utils` on rootfs + modem online for Q6 DSP.
+
+- [x] ~~**Confirm audio playback end-to-end.**~~ Working! Stock speaker path: `RX2 MIX1 INP1=RX1`, `RDAC2 MUX=RX2`, `HPHR=Switch`, `Ext Spk Switch=On`, DPCM `PRI_MI2S_RX Audio Mixer MultiMedia1=1`. Speaker uses HPHR PA → GPIO36 ext PA (not internal SPK PA). Q6 ACDB calibration missing but non-fatal. Volume control also confirmed working.
+
+- [x] ~~**Wire up volume potentiometer.**~~ Working out of the box — confirmed during audio test.
 
 - [ ] Investigate DIAG_CHAR=y EDL crash — `late_initcall` workaround in place. `module_init` causes PMIC reset (not normal panic). Likely USB subsystem not ready at `device_initcall` level.
+
+## Low Priority — Polish
+
+- [ ] fbtft dirty region inversion at boot — `start_line=127 > end_line=0` at t+7.4s. One-time during early console init. May cause brief visual glitch. Ref: `dmesg-8393406a208b7.log`.
+
+- [x] ~~Prima wlan `MAX_CFG_INI_ITEMS too small, must be at least 519`~~ Bumped 512→640.
+
+- ~~MSS PIL `No pas_id found` warning~~ Won't fix — modem uses `qcom,pil-self-auth` (not PAS), so `pas_id` is unused. Adding a wrong value could break auth. Cosmetic only.
+
+- [ ] eMMC missing regulator bindings — `No vmmc regulator found` / `No vqmmc regulator found`. Works because bootloader leaves regulators on, but proper DTS bindings would enable power management.
 
 - [x] ~~CONFIG_KEYBOARD_MATRIX=y to fix gpio-keys~~ Added to defconfig, verified in output/.config.
 
