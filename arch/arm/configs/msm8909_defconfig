@@ -184,6 +184,7 @@ CONFIG_SPI_QUP=y
 # Misc input
 CONFIG_INPUT_EVDEV=y
 CONFIG_KEYBOARD_GPIO=y
+CONFIG_KEYBOARD_MATRIX=y
 # CONFIG_INPUT_MOUSE is not set
 
 # Console on display (Phase 3, pre-enable)
@@ -204,6 +205,8 @@ CONFIG_FB_DEFERRED_IO=y
 # fbtft display
 CONFIG_STAGING=y
 CONFIG_ANDROID=y
+# Alpine doesn't use Android GIDs; paranoid network breaks non-Android daemons
+CONFIG_ANDROID_PARANOID_NETWORK=n
 CONFIG_FB_TFT=y
 CONFIG_FB_TFT_ST7735R=y
 

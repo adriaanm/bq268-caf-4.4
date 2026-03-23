@@ -5,7 +5,7 @@ toolchain := "/opt/toolchains/gcc-linaro-7.4.1-2019.02-x86_64_arm-linux-gnueabih
 out := "output"
 mkbootimg := "tools/mkbootimg/mkbootimg.py"
 defconfig := "msm8909_defconfig"
-cmdline := "androidboot.hardware=qcom androidboot.bootdevice=7824900.sdhci earlyprintk panic=5 console=tty0 consoleblank=0 loglevel=7 root=/dev/mmcblk0p36 rootfstype=ext4 rootwait rw"
+cmdline := "androidboot.hardware=qcom androidboot.bootdevice=7824900.sdhci earlyprintk panic=5 console=tty0 loglevel=7 root=/dev/mmcblk0p36 rootfstype=ext4 rootwait rw"
 serial_tty := "/dev/ttyACM0"
 
 kmake := "make ARCH=arm CROSS_COMPILE=" + toolchain + " O=" + out
@@ -43,7 +43,7 @@ bootimg: build bootimg-assemble
 bootimg-initramfs: build
     bash scripts/build-initramfs.sh
     cat {{out}}/zImage {{out}}/msm8909-bq268.dtb > {{out}}/zImage-dtb
-    python3 {{mkbootimg}} {{out}}/zImage-dtb {{out}}/initramfs.cpio.gz /dev/null {{out}}/boot.img "androidboot.hardware=qcom earlyprintk panic=5 console=tty0 console=ttyGS0 consoleblank=0 loglevel=7"
+    python3 {{mkbootimg}} {{out}}/zImage-dtb {{out}}/initramfs.cpio.gz /dev/null {{out}}/boot.img "androidboot.hardware=qcom earlyprintk panic=5 console=tty0 console=ttyGS0 loglevel=7"
     cp {{out}}/boot.img {{out}}/boot-initramfs.img
     @ls -lh {{out}}/boot-initramfs.img
 
@@ -180,6 +180,22 @@ task-start pattern:
     echo "$existing" | sed '/\[todo\].*{{pattern}}/s/\[todo\]/[in_progress]/' | \
         git notes --ref=tasks add -f -F - HEAD
     git notes --ref=tasks show HEAD
+
+# ── Tools ─────────────────────────────────────────────
+
+# build diag_read (DIAG F3 message reader) for ARM
+diag-build:
+    {{toolchain}}gcc -static -Wall -Wextra -Os -o tools/diag_read tools/diag_read.c
+    {{toolchain}}strip tools/diag_read
+    @ls -lh tools/diag_read
+
+# deploy diag_read to device via SCP
+diag-deploy: diag-build
+    scp tools/diag_read bq268:/usr/local/bin/diag_read
+
+# run diag_read on device for N seconds (default 60), capture output
+diag-capture seconds="60":
+    ssh bq268 '/usr/local/bin/diag_read {{seconds}}' | tee {{out}}/diag-$(date +%Y%m%d-%H%M%S).txt
 
 # clean build output
 clean:
