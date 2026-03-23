@@ -29,6 +29,14 @@ build: defconfig
     cp {{out}}/arch/arm/boot/dts/msm8909-bq268.dtb {{out}}/msm8909-bq268.dtb
     @ls -lh {{out}}/zImage {{out}}/msm8909-bq268.dtb
 
+# build kernel modules (wlan.ko etc.)
+modules: defconfig
+    {{kmake}} -j$(nproc) modules
+
+# install modules to output/modules/ (for rootfs packaging)
+modules-install: modules
+    {{kmake}} INSTALL_MOD_PATH={{out}}/modules modules_install
+
 # assemble boot.img from existing build artifacts
 bootimg-assemble:
     cat {{out}}/zImage {{out}}/msm8909-bq268.dtb > {{out}}/zImage-dtb
@@ -36,8 +44,8 @@ bootimg-assemble:
     cp {{out}}/boot.img {{out}}/boot-$(git rev-parse --short HEAD).img
     @ls -lh {{out}}/boot-$(git rev-parse --short HEAD).img
 
-# full build: kernel + boot.img (no initramfs)
-bootimg: build bootimg-assemble
+# full build: kernel + modules + boot.img (no initramfs)
+bootimg: build modules bootimg-assemble
 
 # boot.img with initramfs (busybox shell on ttyGS0 via USB configfs ACM)
 bootimg-initramfs: build

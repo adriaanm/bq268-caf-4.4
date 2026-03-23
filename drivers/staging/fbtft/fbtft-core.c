@@ -389,7 +389,7 @@ static void fbtft_update_display(struct fbtft_par *par, unsigned start_line,
 	len = (end_line - start_line + 1) * par->info->fix.line_length;
 	ret = par->fbtftops.write_vmem(par, offset, len);
 	if (ret < 0)
-		dev_err(par->info->device,
+		dev_err_ratelimited(par->info->device,
 			"%s: write_vmem failed to update display buffer\n",
 			__func__);
 
