@@ -248,6 +248,7 @@ struct fbtft_par {
 	bool first_update_done;
 	ktime_t update_time;
 	bool bgr;
+	bool blanked;
 	void *extra;
 	struct backlight_device *bl_dev;
 };

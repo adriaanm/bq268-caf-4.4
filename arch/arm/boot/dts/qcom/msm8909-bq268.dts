@@ -314,9 +314,8 @@
 			reset-gpios = <&msm_gpio 2 1>; /* GPIO_ACTIVE_LOW */
 			dc-gpios = <&msm_gpio 3 0>;
 			rotate = <90>;
-			fps = <40>;
+			fps = <30>;
 			buswidth = <8>;
-			txbuflen = <20480>;
 			width = <128>;
 			height = <160>;
 		};

@@ -25,4 +25,4 @@
 
 - [x] ~~screen blanking~~ Removed `consoleblank=0` from cmdline in justfile. fbcon default 10-min blank timer now works (draws black). Backlight stays on (PM8909 MPP4 current sink, needs qpnp-leds driver for proper control — not yet ported).
 
-- [ ] Port qpnp-leds for LCD backlight control — PM8909 MPP4 drives the ST7735S backlight as a current sink (20mA, `bkl-trigger`). 3.18 DTS has `qcom,led_mpp_4` under `qcom,leds@a300`. Need `CONFIG_LEDS_QPNP` or equivalent on 4.4, plus DTS node. Would enable proper fb_blank backlight off via the backlight subsystem.
+- [x] ~~Port qpnp-leds for LCD backlight control~~ Enabled `CONFIG_LEDS_QPNP=y`. DTS already correct via MTP DTSI include chain (MPP4 current sink, 20mA, `bkl-trigger`). Confirmed: `/sys/class/leds/lcd-bl/` present at boot. Also registers `button-backlight`, `red`, `green` LEDs.

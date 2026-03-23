@@ -351,6 +351,9 @@ static void fbtft_update_display(struct fbtft_par *par, unsigned start_line,
 	bool timeit = false;
 	int ret = 0;
 
+	if (par->blanked)
+		return;
+
 	if (unlikely(par->debug & (DEBUG_TIME_FIRST_UPDATE | DEBUG_TIME_EACH_UPDATE))) {
 		if ((par->debug & DEBUG_TIME_EACH_UPDATE) ||
 				((par->debug & DEBUG_TIME_FIRST_UPDATE) && !par->first_update_done)) {
@@ -567,23 +570,24 @@ static int fbtft_fb_setcolreg(unsigned regno, unsigned red, unsigned green,
 static int fbtft_fb_blank(int blank, struct fb_info *info)
 {
 	struct fbtft_par *par = info->par;
-	int ret = -EINVAL;
+	int ret = 0;
 
 	dev_dbg(info->dev, "%s(blank=%d)\n",
 		__func__, blank);
-
-	if (!par->fbtftops.blank)
-		return ret;
 
 	switch (blank) {
 	case FB_BLANK_POWERDOWN:
 	case FB_BLANK_VSYNC_SUSPEND:
 	case FB_BLANK_HSYNC_SUSPEND:
 	case FB_BLANK_NORMAL:
-		ret = par->fbtftops.blank(par, true);
+		par->blanked = true;
+		if (par->fbtftops.blank)
+			ret = par->fbtftops.blank(par, true);
 		break;
 	case FB_BLANK_UNBLANK:
-		ret = par->fbtftops.blank(par, false);
+		par->blanked = false;
+		if (par->fbtftops.blank)
+			ret = par->fbtftops.blank(par, false);
 		break;
 	}
 	return ret;
