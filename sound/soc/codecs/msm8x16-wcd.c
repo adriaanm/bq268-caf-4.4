@@ -24,6 +24,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/kernel.h>
 #include <linux/gpio.h>
+#include <linux/regmap.h>
 #include <linux/spmi.h>
 #include <linux/of_gpio.h>
 #include <linux/regulator/consumer.h>
@@ -5536,12 +5537,6 @@ static int msm8x16_wcd_device_up(struct snd_soc_codec *codec)
 		snd_soc_codec_get_drvdata(codec);
 	int ret = 0;
 
-	if (!codec->component.regmap) {
-		dev_warn(codec->dev, "%s: regmap not ready, skipping\n",
-			 __func__);
-		return 0;
-	}
-
 	dev_dbg(codec->dev, "%s: device up!\n", __func__);
 
 	snd_soc_dapm_mutex_lock(snd_soc_codec_get_dapm(codec));
@@ -5557,9 +5552,11 @@ static int msm8x16_wcd_device_up(struct snd_soc_codec *codec)
 	msm8x16_wcd_codec_init_reg(codec);
 	msm8x16_wcd_update_reg_defaults(codec);
 
-	codec->cache_init = true;
-	snd_soc_cache_sync(codec);
-	codec->cache_init = false;
+	if (codec->component.regmap) {
+		codec->cache_init = true;
+		snd_soc_cache_sync(codec);
+		codec->cache_init = false;
+	}
 
 	msm8x16_wcd_write(codec, MSM8X16_WCD_A_DIGITAL_INT_EN_SET,
 				MSM8X16_WCD_A_DIGITAL_INT_EN_SET__POR);
@@ -5726,6 +5723,57 @@ static void msm8x16_wcd_configure_cap(struct snd_soc_codec *codec,
 	}
 }
 
+/*
+ * Regmap wrapper — the 4.4 ASoC framework requires regmap for
+ * snd_soc_cache_sync().  msm8x16-wcd uses old-style .read/.write
+ * callbacks (SPMI + AHB).  This thin regmap bridges the two.
+ */
+static int msm8x16_wcd_regmap_read(void *context, unsigned int reg,
+				    unsigned int *val)
+{
+	struct snd_soc_codec *codec = context;
+
+	*val = msm8x16_wcd_read(codec, reg);
+	return 0;
+}
+
+static int msm8x16_wcd_regmap_write(void *context, unsigned int reg,
+				     unsigned int val)
+{
+	struct snd_soc_codec *codec = context;
+
+	return msm8x16_wcd_write(codec, reg, val);
+}
+
+static bool msm8x16_wcd_regmap_readable(struct device *dev, unsigned int reg)
+{
+	if (reg >= MSM8X16_WCD_CACHE_SIZE)
+		return false;
+	return msm8x16_wcd_reg_readable[reg];
+}
+
+static bool msm8x16_wcd_regmap_volatile(struct device *dev, unsigned int reg)
+{
+	if (reg >= MSM8X16_WCD_CACHE_SIZE)
+		return true;
+	return msm8x16_wcd_reg_readonly[reg];
+}
+
+static struct regmap_config msm8x16_wcd_regmap_config = {
+	.name = "msm8x16-wcd",
+	.reg_bits = 16,
+	.val_bits = 8,
+	.reg_stride = 1,
+	.max_register = MSM8X16_WCD_MAX_REGISTER,
+	.reg_read = msm8x16_wcd_regmap_read,
+	.reg_write = msm8x16_wcd_regmap_write,
+	.readable_reg = msm8x16_wcd_regmap_readable,
+	.volatile_reg = msm8x16_wcd_regmap_volatile,
+	.reg_defaults_raw = msm8x16_wcd_reset_reg_defaults,
+	.num_reg_defaults_raw = MSM8X16_WCD_CACHE_SIZE,
+	.cache_type = REGCACHE_FLAT,
+};
+
 static int msm8x16_wcd_codec_probe(struct snd_soc_codec *codec)
 {
 	struct msm8x16_wcd_priv *msm8x16_wcd_priv;
@@ -5750,6 +5798,16 @@ static int msm8x16_wcd_codec_probe(struct snd_soc_codec *codec)
 	codec->control_data = dev_get_drvdata(codec->dev);
 	snd_soc_codec_set_drvdata(codec, msm8x16_wcd_priv);
 	msm8x16_wcd_priv->codec = codec;
+
+	/* Create regmap for 4.4 ASoC cache_sync support */
+	codec->component.regmap = devm_regmap_init(codec->dev, NULL, codec,
+						   &msm8x16_wcd_regmap_config);
+	if (IS_ERR(codec->component.regmap)) {
+		ret = PTR_ERR(codec->component.regmap);
+		dev_err(codec->dev, "%s: regmap init failed: %d\n",
+			__func__, ret);
+		codec->component.regmap = NULL;
+	}
 
 	/* codec resmgr module init */
 	msm8x16_wcd = codec->control_data;
@@ -6014,12 +6072,6 @@ static struct snd_soc_codec_driver soc_codec_dev_msm8x16_wcd = {
 
 	.suspend = msm8x16_wcd_suspend,
 	.resume = msm8x16_wcd_resume,
-
-	/* readable_register and volatile_register moved to regmap_config in 4.4 */
-
-	.reg_cache_size = MSM8X16_WCD_CACHE_SIZE,
-	.reg_cache_default = msm8x16_wcd_reset_reg_defaults,
-	.reg_word_size = 1,
 
 	.controls = msm8x16_wcd_snd_controls,
 	.num_controls = ARRAY_SIZE(msm8x16_wcd_snd_controls),
