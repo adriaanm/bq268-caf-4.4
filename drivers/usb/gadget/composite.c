@@ -2117,8 +2117,9 @@ static DEVICE_ATTR_RO(suspended);
 static void __composite_unbind(struct usb_gadget *gadget, bool unbind_driver)
 {
 	struct usb_composite_dev	*cdev = get_gadget_data(gadget);
-	struct usb_gadget_strings	*gstr = cdev->driver->strings[0];
-	struct usb_string		*dev_str = gstr->strings;
+	struct usb_gadget_strings	*gstr = cdev->driver->strings ?
+						cdev->driver->strings[0] : NULL;
+	struct usb_string		*dev_str = gstr ? gstr->strings : NULL;
 
 	/* composite_disconnect() must already have been called
 	 * by the underlying peripheral controller driver!
@@ -2138,7 +2139,8 @@ static void __composite_unbind(struct usb_gadget *gadget, bool unbind_driver)
 
 	composite_dev_cleanup(cdev);
 
-	if (dev_str[USB_GADGET_MANUFACTURER_IDX].s == cdev->def_manufacturer)
+	if (dev_str &&
+	    dev_str[USB_GADGET_MANUFACTURER_IDX].s == cdev->def_manufacturer)
 		dev_str[USB_GADGET_MANUFACTURER_IDX].s = "";
 
 	kfree(cdev->def_manufacturer);
