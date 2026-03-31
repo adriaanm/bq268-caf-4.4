@@ -53,9 +53,57 @@
 
 - ~~Broadcast timer (arch_mem_timer).~~ Won't fix — see lpm-levels above. Selected as broadcast device in oneshot mode but never fires. Root cause likely silicon/TZ limitation on this MSM8909 variant. Not worth debugging given OEM also gave up.
 
+## Low Priority — CVE Backports (post-4.4.302 EOL)
+
+Kernel is 4.4.302 (EOL Feb 2022). These CVEs were disclosed after EOL and affect our version. Risk is low for a walkie-talkie on trusted networks, but worth tracking. Many high-profile CVEs (nf_tables, net/sched, Bluetooth, ALSA USB, Dirty Pipe) are **not exploitable** because the relevant subsystems are disabled in our config.
+
+### Confirmed exploitable on this platform
+
+| CVE | Subsystem | CVSS | Vector | Assessment |
+|-----|-----------|------|--------|------------|
+| CVE-2024-49883 | ext4 `ext4_ext_insert_extent` UAF | 7.8 | Local — path reallocation in `ext4_ext_create_new_leaf` leaves stale pointer | Highest priority. ext4 is rootfs. Triggered by normal filesystem operations, not just malicious images. Patch available in stable trees (5.10.227+). |
+| CVE-2022-25258 | USB gadget composite OS descriptor validation | 4.6 | Physical USB — crafted control transfer to gadget ep0 | Requires physical USB access. OS descriptor handling is compiled in (libcomposite built-in). Medium risk since device has USB exposed for serial/ECM. |
+| CVE-2021-39685 | USB gadget ep0 buffer overflow (65KB read/write) | 7.8 | Physical USB — wLength > 4096 in control transfer | Core composite.c buffer size issue. However, the specifically vulnerable functions (rndis, hid, uac1, uac2) are NOT compiled in. Residual risk in shared ep0 path. |
+| CVE-2022-1184 | ext4 `dx_insert_block` UAF | 5.5 | Local — corrupted ext4 filesystem triggers crash | DoS only. Requires mounting malicious ext4 image. Low risk on eMMC-only device. |
+| CVE-2023-2513 | ext4 `ext4_xattr_set_entry` UAF | 6.7 | Local — requires CAP_SYS_ADMIN to manipulate xattrs | Requires root. Low risk since attacker with root already owns the device. |
+
+### Not exploitable (disabled subsystems)
+
+These affect 4.4.x per NVD but the vulnerable code is not compiled in our config:
+
+| CVE | Subsystem | CVSS | Why not exploitable |
+|-----|-----------|------|---------------------|
+| CVE-2024-1086 | nf_tables | 7.8 | `CONFIG_NETFILTER` not set. Actively exploited in ransomware but irrelevant here. |
+| CVE-2023-1829 | tcindex (net/sched) | 7.8 | `CONFIG_NET_SCHED` not set |
+| CVE-2023-4623 | sch_hfsc (net/sched) | 7.8 | `CONFIG_NET_SCHED` not set |
+| CVE-2023-6932 | IPv4 IGMP | 7.0 | `CONFIG_IP_MULTICAST` not set |
+| CVE-2024-53197 | USB audio ALSA | 7.8 | `CONFIG_SND_USB_AUDIO` not set. CISA KEV actively exploited. |
+| CVE-2024-53150 | USB audio ALSA | 7.8 | `CONFIG_SND_USB_AUDIO` not set. CISA KEV actively exploited. |
+| CVE-2022-47929 | net/sched sch_api | 5.5 | `CONFIG_NET_SCHED` not set |
+
+### Not affected (version range excludes 4.4.x)
+
+| CVE | Min version | Description |
+|-----|-------------|-------------|
+| CVE-2022-0847 (Dirty Pipe) | 5.8+ | Not present in 4.4 |
+| CVE-2022-41674/42719/42720 (WiFi RCE) | 5.1+ | MBSSID parsing not in 4.4 mac80211 |
+| CVE-2022-0185 | 5.1+ | legacy_parse_param not in 4.4 |
+| CVE-2023-0461 | 4.13+ | TLS/ULP subsystem not in 4.4 |
+| CVE-2023-0266 (ALSA PCM) | 4.14+ | Not in 4.4 |
+| CVE-2022-4378 (sysctl stack overflow) | 4.9+ | Not in 4.4 |
+| CVE-2024-36904 (TCP UAF) | 4.16+ | Not in 4.4 |
+| CVE-2023-3812 (tun/tap OOB) | 4.15+ | Not in 4.4 |
+| CVE-2022-2588 (cls_route UAF) | 4.9+ | Not in 4.4 |
+| CVE-2022-47939 (ksmbd RCE) | 5.15+ | ksmbd doesn't exist in 4.4 |
+| CVE-2023-2156 (IPv6 RPL DoS) | 5.7+ | RPL not in 4.4 |
+
+### Userspace note
+
+CVE-2023-52160 — wpa_supplicant through 2.10 allows PEAP authentication bypass. Not a kernel CVE but relevant to WiFi. Fixed in Alpine's wpa_supplicant 2.10-r11. Check rootfs version if connecting to Enterprise WPA networks.
+
 ## Future — Large Efforts
 
-- [ ] **Catch up with upstream 4.4.x stable releases.** Our base is CAF `kernel.lnx.4.4` (4.4.21). Upstream 4.4.x LTS has hundreds of stable patches (security, driver fixes, core fixes). Need to assess: merge strategy (rebase vs cherry-pick), conflict surface with our CAF-specific code, and whether any stable patches fix known issues. Big effort — needs planning before starting.
+- [x] ~~**Catch up with upstream 4.4.x stable releases.**~~ Done — merged 4.4.21 → 4.4.302 (EOL). See `stable-upgrade-4.4.md`. Our base is CAF `kernel.lnx.4.4` (4.4.21). Upstream 4.4.x LTS has hundreds of stable patches (security, driver fixes, core fixes). Need to assess: merge strategy (rebase vs cherry-pick), conflict surface with our CAF-specific code, and whether any stable patches fix known issues. Big effort — needs planning before starting.
 
 - ~~eMMC missing regulator bindings — `No vmmc regulator found` / `No vqmmc regulator found`.~~ Won't fix — CAF sdhci-msm uses its own `vdd-supply`/`vdd-io-supply` path (set in mtp.dtsi, working). The `vmmc`/`vqmmc` messages come from the generic SDHCI core's separate lookup; adding them would cause double regulator management. Cosmetic only.
 
