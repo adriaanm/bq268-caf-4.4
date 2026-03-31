@@ -10,6 +10,21 @@ Port the MSM8909 BQ268 walkie-talkie from a working 3.18 CAF kernel to 4.4 CAF. 
 - Android userspace (we run Alpine Linux / OpenRC)
 - GCC 8+ support (parked — needs backporting 4.17 compiletime_assert fixes)
 
+## Branch Provenance
+
+The `bq268` branch is based on CAF commit `31516ed73500e` from the `kernel.lnx.4.4` tree (SUBLEVEL 4.4.21). This was found by searching the full CAF history for the commit with the smallest diff against our original shallow-clone base (`5cfb00b92fdc4`). See `rebase_android_stable_4.4.md` for the full analysis.
+
+On top of this base: cherry-pick of `2dd3d52f9567d` (osq_lock `smp_wmb()` fix for ARM memory ordering), then all custom commits from the original `bq268-orig-shallow` branch.
+
+**Remotes:**
+- `origin` — `https://git.codelinaro.org/clo/la/kernel/msm-4.4.git` (CAF upstream)
+- `android-linux-stable` — `https://github.com/android-linux-stable/msm-4.4.git` (stable merges)
+- `github` — `https://github.com/adriaanm/bq268-caf-4.4.git` (our repo)
+
+**Old branches (preserved for reference):**
+- `bq268-orig-shallow` — original working kernel on shallow-clone CAF base
+- `bq268-rebased-r42-backup` — failed rebase onto r42 (4.4.205, too large a jump)
+
 ## Reference
 
 - **3.18 CAF kernel**: `~/bq268-caf_msm-3.18` (read-only reference — request changes through user). Note: 3.18 modem never tested with Alpine; stock kernel is Android-only.
@@ -20,6 +35,7 @@ Port the MSM8909 BQ268 walkie-talkie from a working 3.18 CAF kernel to 4.4 CAF. 
 - **EDL tool + device dump**: `~/bq268-edl` — Go-based EDL backup/restore tool; `dump/` has all eMMC partitions including stock `boot.bin`
 - **Lineage/Android ref**: `~/bq268-lineage` — LineageOS/Android reference tree
 - **Learnings & architecture decisions**: see `LEARNINGS.md`
+- **Rebase analysis**: see `rebase_android_stable_4.4.md`
 
 ## Reproducibility
 
