@@ -33,6 +33,7 @@ On top of this base: cherry-pick of `2dd3d52f9567d` (osq_lock `smp_wmb()` fix fo
 - **Rootfs**: Alpine 3.21.3 on eMMC partition 36 (built/managed by `~/bq268-alpine`)
 - **Bootloader (aboot)**: `~/bq268-aboot` — LK source + decompiled stock aboot + docs (memory layout, RPM/DDR, TZ interface, boot analysis)
 - **EDL tool + device dump**: `~/bq268-edl` — Go-based EDL backup/restore tool; `dump/` has all eMMC partitions including stock `boot.bin`
+- **Prima WLAN upstream**: `~/prima-upstream` — cloned from `https://git.codelinaro.org/clo/la/platform/vendor/qcom-opensource/wlan/prima` branch `LA.UM.7.7.c26` (MSM8909-targeted). In-tree at `drivers/staging/prima/`, updated to tag `LA.UM.7.7.c26-11700-8x09.0`. Kbuild/Kconfig/compat shims are ours; the rest is upstream. To update: copy tree from `~/prima-upstream`, restore Kbuild/Kconfig/compat files, re-apply cfg80211 and indentation fixes.
 - **WireGuard compat module**: `~/wireguard-linux-compat` — cloned from `https://git.zx2c4.com/wireguard-linux-compat` (tag `v1.0.20220627`). Out-of-tree module for kernels 3.10–5.5. Build: `make -C ~/wireguard-linux-compat/src KERNELDIR=$(pwd) O=$(pwd)/output CROSS_COMPILE=...arm-linux-gnueabihf- ARCH=arm -j$(nproc)`. Produces `wireguard.ko`, deploy to `/lib/modules/$(kernelrelease)/`.
 - **Learnings & architecture decisions**: see `LEARNINGS.md`
 - **Rebase analysis & stable upgrade**: see `stable-upgrade-4.4.md`
