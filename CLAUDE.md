@@ -34,8 +34,9 @@ On top of this base: cherry-pick of `2dd3d52f9567d` (osq_lock `smp_wmb()` fix fo
 - **Bootloader (aboot)**: `~/bq268-aboot` — LK source + decompiled stock aboot + docs (memory layout, RPM/DDR, TZ interface, boot analysis)
 - **EDL tool + device dump**: `~/bq268-edl` — Go-based EDL backup/restore tool; `dump/` has all eMMC partitions including stock `boot.bin`
 - **Lineage/Android ref**: `~/bq268-lineage` — LineageOS/Android reference tree
+- **WireGuard compat module**: `~/wireguard-linux-compat` — cloned from `https://git.zx2c4.com/wireguard-linux-compat` (tag `v1.0.20220627`). Out-of-tree module for kernels 3.10–5.5. Build: `make -C ~/wireguard-linux-compat/src KERNELDIR=$(pwd) O=$(pwd)/output CROSS_COMPILE=...arm-linux-gnueabihf- ARCH=arm -j$(nproc)`. Produces `wireguard.ko`, deploy to `/lib/modules/$(kernelrelease)/`.
 - **Learnings & architecture decisions**: see `LEARNINGS.md`
-- **Rebase analysis**: see `stable-upgrade-4.4.md`
+- **Rebase analysis & stable upgrade**: see `stable-upgrade-4.4.md`
 
 ## Reproducibility
 
