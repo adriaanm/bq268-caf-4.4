@@ -1389,9 +1389,14 @@ static void qpnp_batt_external_power_changed(struct power_supply *psy)
 		chip->bms_psy = power_supply_get_by_name("bms");
 
 	if (qpnp_lbc_is_usb_chg_plugged_in(chip)) {
-		power_supply_get_property(chip->usb_psy,
-				POWER_SUPPLY_PROP_CURRENT_MAX, &ret);
-		current_ma = ret.intval / 1000;
+		if (chip->usb_psy) {
+			power_supply_get_property(chip->usb_psy,
+					POWER_SUPPLY_PROP_CURRENT_MAX, &ret);
+			current_ma = ret.intval / 1000;
+		} else {
+			current_ma = chip->usb_psy_ma ? chip->usb_psy_ma
+						      : QPNP_CHG_I_MAX_MIN_90;
+		}
 
 		if (current_ma == chip->prev_max_ma)
 			goto skip_current_config;
@@ -2493,9 +2498,10 @@ static irqreturn_t qpnp_lbc_usbin_valid_irq_handler(int irq, void *_chip)
 			qpnp_lbc_charger_enable(chip, SOC, 1);
 		}
 
-		pr_debug("Updating usb_psy PRESENT property\n");
-		{
+		if (chip->usb_psy) {
 			union power_supply_propval pval = {chip->usb_present,};
+
+			pr_debug("Updating usb_psy PRESENT property\n");
 			power_supply_set_property(chip->usb_psy,
 				POWER_SUPPLY_PROP_PRESENT, &pval);
 		}
@@ -2846,9 +2852,11 @@ static void determine_initial_status(struct qpnp_lbc_chip *chip)
 	union power_supply_propval pval = {0,};
 
 	chip->usb_present = qpnp_lbc_is_usb_chg_plugged_in(chip);
-	pval.intval = chip->usb_present;
-	power_supply_set_property(chip->usb_psy,
-			POWER_SUPPLY_PROP_PRESENT, &pval);
+	if (chip->usb_psy) {
+		pval.intval = chip->usb_present;
+		power_supply_set_property(chip->usb_psy,
+				POWER_SUPPLY_PROP_PRESENT, &pval);
+	}
 	/*
 	 * Set USB psy online to avoid userspace from shutting down if battery
 	 * capacity is at zero and no chargers online.
@@ -2860,9 +2868,11 @@ static void determine_initial_status(struct qpnp_lbc_chip *chip)
 					&chip->irqs[USB_CHG_GONE]);
 			qpnp_chg_collapsible_chgr_config(chip, 1);
 		}
-		pval.intval = 1;
-		power_supply_set_property(chip->usb_psy,
-				POWER_SUPPLY_PROP_ONLINE, &pval);
+		if (chip->usb_psy) {
+			pval.intval = 1;
+			power_supply_set_property(chip->usb_psy,
+					POWER_SUPPLY_PROP_ONLINE, &pval);
+		}
 	}
 }
 
@@ -3181,10 +3191,8 @@ static int qpnp_lbc_main_probe(struct platform_device *pdev)
 	int rc = 0;
 
 	usb_psy = power_supply_get_by_name("usb");
-	if (!usb_psy) {
-		pr_err("usb supply not found deferring probe\n");
-		return -EPROBE_DEFER;
-	}
+	if (!usb_psy)
+		pr_warn("usb supply not found, USB current tracking disabled\n");
 
 	chip = devm_kzalloc(&pdev->dev, sizeof(struct qpnp_lbc_chip),
 				GFP_KERNEL);

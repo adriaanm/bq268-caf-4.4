@@ -522,7 +522,7 @@
  *
  *  - QRD SKUI 4.2V 3000mAh battery profile (extracted from stock DTB)
  *  - Charging enabled with ibatsafe=800mA
- *  - BMS: force-s2-in-charging, remove volatge-soc-timeout-ms
+ *  - BMS: force-s2-in-charging
  * ════════════════════════════════════════════════════════════════════════ */
 
 / {
@@ -542,7 +542,6 @@
 
 &pm8909_bms {
 	qcom,force-s2-in-charging;
-	/delete-property/ qcom,volatge-soc-timeout-ms;
 };
 
 /* ════════════════════════════════════════════════════════════════════════
