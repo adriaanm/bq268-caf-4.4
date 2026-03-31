@@ -1,5 +1,15 @@
 # Stable Kernel Upgrade: 4.4.21 → 4.4.302
 
+## Progress
+
+- [x] 4.4.21 — base (current)
+- [ ] 4.4.50
+- [ ] 4.4.75
+- [ ] 4.4.100
+- [ ] 4.4.150
+- [ ] 4.4.200
+- [ ] 4.4.302 (EOL)
+
 ## Goal
 
 Merge upstream Linux 4.4.x stable fixes into our CAF-based kernel. We're at 4.4.21; the 4.4 LTS series reached EOL at 4.4.302 (Feb 2022). That's 281 sublevel bumps of security and bug fixes.
