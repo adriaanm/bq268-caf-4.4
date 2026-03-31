@@ -7,7 +7,7 @@
 | 4.4.21 | `8954c89a355d` | Yes | **Flashed to eMMC** — this is the fallback on normal reboot |
 | 4.4.50 | `0046d2e1791e` | Yes | Boots OK, uname confirms 4.4.50-bq268. WiFi module not deployed (no USB ECM on host). |
 | 4.4.75 | `e7a933b099c5` | | Device unreachable after reboot, needs manual boot test |
-| 4.4.100 | | | |
+| 4.4.100 | `ec56da4c3670` | | Device unreachable, needs manual boot test |
 | 4.4.150 | | | |
 | 4.4.200 | | | |
 | 4.4.302 | | | |
