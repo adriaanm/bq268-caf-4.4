@@ -101,6 +101,5 @@ When porting a subsystem from 3.18 to 4.4:
 | Modem Q6 stalled init | **Resolved** | Root cause: modem needs `rmt_storage` daemon for EFS partition I/O. Without it, modem init stalls at 55s watchdog. With rmt_storage running, modem fully initializes: APR audio, DIAG, DATA channels all created. |
 | BAM DMUX data path | **Open** | Modem A2 task alive but never sets SMSM A2_POWER_CONTROL. BAM HW works (force init: 0x04044000, 6 pipes). Forcing crashes modem: `a2_power.c:2783:A2 Assertion Failed`. All AP-side causes ruled out. Need modem DIAG logs to identify A2 precondition. `msm_rmnet_bam.c` ported, ready to create rmnet interfaces once BAM initializes. |
 | WCD codec regmap | **Open** | msm8x16-wcd uses old .read/.write callbacks, not regmap. `snd_soc_cache_sync()` crashes on NULL regmap in 4.4. Guarded with NULL check (skips sync). Blocks audio, not modem. |
-| sleep() hangs with lpm-levels | **Workaround**: lpm-levels disabled in DTS | Timer dies when CPU enters idle via lpm-levels. |
+| lpm-levels deep idle | **Won't fix** | Stock OEM kernel ships with `lpm_levels.sleep_disabled=1`. Broadcast timer (arch_mem_timer) never fires (0 interrupts) — likely silicon/TZ limitation. Per-CPU power collapse savings marginal (6-18 mW). WFI-only idle is fine. |
 | Bus scaling crashes | **Workaround**: QCOM_BUS_SCALING + BIMC_BWMON disabled | Kernel hangs before init when enabled. Needs DT or driver debug. |
-| Broadcast timer (arch_mem_timer) | **Open** | Selected as broadcast device, in oneshot mode, but 0 interrupts ever. Blocks deep idle. |

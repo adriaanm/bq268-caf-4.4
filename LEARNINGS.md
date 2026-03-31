@@ -191,16 +191,40 @@ t+∞     Stable — no watchdog, DIAG channels OPENED, DATA1-4/DS OPENING (mode
 
 **SMSM A2_POWER_CONTROL — modem A2 task alive but not activating:** Modem never sets bit 1 of SMSM_MODEM_STATE despite full init (APR up, DIAG up, EFS served). BAM DMUX SMSM callbacks confirmed registered. All stock Android daemons (qmuxd, dpmQmiMgr, netmgrd, irsc_util) confirmed unnecessary by postmarketOS. Forcing BAM init from AP side via debugfs (`echo 1 > /sys/kernel/debug/bam_dmux/force_a2pc`) successfully registers BAM 0x04044000 (6 pipes, ver 0x25) but immediately crashes the modem: `a2_power.c:2783:A2 Assertion Failed`. This confirms: (1) BAM hardware works, (2) modem A2 task is alive and monitoring BAM state, (3) A2 deliberately does not set A2_POWER_CONTROL — some internal precondition is unmet. APPS SMSM state matches stock (`0x00001429`). Needs modem-side DIAG logging to identify what A2 is waiting for.
 
+**Modem operating mode must be set to `online` explicitly:** The modem firmware boots into `shutting-down` mode by default. On stock Android, `rild` sends `QMI_DMS_SET_OPERATING_MODE(online)` early in boot. Without this, the modem's radio remains off and it never scans for networks. Fix: `qmicli -d msmipc://0 --dms-set-operating-mode=online`. After setting online: RF activates, NAS starts scanning (UMTS), modem finds networks. Without a SIM card, registration state is `limited` (emergency only). The rootfs modem boot script should send this after rmt_storage is ready.
+
 **IPC Router Security (`CONFIG_IPC_ROUTER_SECURITY`) must be disabled:** On stock Android, `irsc_util` runs at boot with `/vendor/etc/sec_config` and calls `IPC_ROUTER_IOCTL_CONFIG_SEC_RULES` to configure security policies, then signals `irsc_completion`. Without this, `wait_for_irsc_completion()` in `ipc_router_socket.c:347` blocks **forever** (30s timeout loop, infinite retry) on any `sendto()` from a CLIENT_PORT. This would block all userspace QMI clients (qmicli, ModemManager, libqmi). We don't have `irsc_util` or `sec_config` for Alpine, so disable the config entirely — makes the wait a no-op.
 
 **Modem userspace architecture (postmarketOS equivalent):**
 - `rmt_storage` — serves modem EFS partitions (custom, in `~/bq268-alpine`)
-- `libqmi` / `qmi-utils` — QMI client tools (Alpine `community` repo). On CAF 4.4 with AF_MSM_IPC (not qrtr), needs `libqipcrtr4msmipc` adapter or `libsmdpkt_wrapper`.
+- `libqmi` / `qmi-utils` — QMI client tools. Custom build at `~/libqmi/` with `msm_ipc` transport support. Use `qmicli -d msmipc://0` to talk to modem over AF_MSM_IPC (IPC Router). Binaries installed on rootfs: `libqmi-glib.so.5.12.0`, `qmicli 1.39.0`, `qmi-proxy`.
 - `ModemManager` — high-level modem management daemon (uses libqmi)
 - `smdcntl0` → SMD channel `DATA5_CNTL` (primary QMI control)
 - `smdcntl8` → SMD channel `DATA40_CNTL` (secondary QMI control)
 
 **Subsystem fd lifecycle:** Opening `/dev/subsys_modem` calls `subsystem_get()` which boots the modem. When the fd closes, `subsystem_put()` shuts it down. On Android, rild holds the fd permanently. On Alpine, use: `sleep 999999 < /dev/subsys_modem &`. If the holder process dies (e.g., modem SSR crashes it), the modem shuts down.
+
+## Audio — Speaker Playback Working
+
+BQ268 speaker uses the **HPHR** (headphone right) PA output → GPIO36 external amplifier, NOT the internal SPK PA. This matches the stock `mixer_paths.xml` "speaker" path from `~/bq268-lineage/device/udotech/udosmart/configs/mixer_paths.xml`.
+
+**Required mixer controls (via `amixer -c 0 cset`):**
+```
+PRI_MI2S_RX Audio Mixer MultiMedia1 = 1   (DPCM frontend→backend)
+RX2 MIX1 INP1 = RX1                       (I2S RX1 → RX2 mixer)
+RDAC2 MUX = RX2                           (route RX2 to RDAC2/HPHR)
+HPHR = Switch                             (enable right headphone PA)
+Ext Spk Switch = On                       (enable ext PA via GPIO36)
+RX2 Digital Volume = 96                   (volume)
+```
+
+**DAPM path:** I2S RX1 → RX2 MIX1 → RDAC2 MUX → HPHR DAC → HPHR PA → Ext Spk Switch → Ext Spk (GPIO36) → speaker
+
+**Important:** The internal SPK PA path (`RX3 MIX1 → SPK DAC → SPK PA → SPK_OUT`) is for the earpiece/handset, NOT the external speaker. The `Ext Spk` DAPM widget is wired to `HPHL PA` and `HPHR PA`, not `SPK_OUT`.
+
+**Q6 ACDB calibration:** Missing (`cal_block not found` in dmesg) but non-fatal — audio plays fine without it. On stock Android, `audiod` + `libacdbloader.so` load calibration data. For Alpine, this is not needed for basic playback.
+
+**Volume control:** Hardware potentiometer works — confirmed during testing.
 
 ## WiFi (WCNSS) — Working
 
@@ -254,6 +278,6 @@ GCC 7.4.1 (Linaro 2019.02). GCC 8+ breaks `BUILD_BUG_ON`/`compiletime_assert` �
 - fbtft: `par->bl_dev` (not `fb_info`), removed `select FB_BACKLIGHT`
 - soc/qcom Makefile: added `sysmon.o` for `CONFIG_MSM_SYSMON_COMM`
 - APR: `SUBSYS_UP` → `SUBSYS_LOADED` in apr_v3.c (MSM8909 has no LPASS)
-- msm8x16-wcd.c: NULL guard in `adsp_state_callback` and `msm8x16_wcd_device_up` for missing regmap
+- msm8x16-wcd.c: regmap wrapper (REGCACHE_FLAT) for 4.4 ASoC cache_sync; old NULL guard removed
 - bam_dmux.c: ported from 3.18 (not in CAF 4.4 tree)
 - memshare DTS: removed `qcom,allocate-boot-time` (crashes early boot via `hyp_assign_phys`)
