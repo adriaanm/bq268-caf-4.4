@@ -12,7 +12,7 @@ Port the MSM8909 BQ268 walkie-talkie from a working 3.18 CAF kernel to 4.4 CAF. 
 
 ## Branch Provenance
 
-The `bq268` branch is based on CAF commit `31516ed73500e` from the `kernel.lnx.4.4` tree (SUBLEVEL 4.4.21). This was found by searching the full CAF history for the commit with the smallest diff against our original shallow-clone base (`5cfb00b92fdc4`). See `rebase_android_stable_4.4.md` for the full analysis.
+The `bq268` branch is based on CAF commit `31516ed73500e` from the `kernel.lnx.4.4` tree (SUBLEVEL 4.4.21). This was found by searching the full CAF history for the commit with the smallest diff against our original shallow-clone base (`5cfb00b92fdc4`). See `stable-upgrade-4.4.md` for the full analysis.
 
 On top of this base: cherry-pick of `2dd3d52f9567d` (osq_lock `smp_wmb()` fix for ARM memory ordering), then all custom commits from the original `bq268-orig-shallow` branch.
 
@@ -35,7 +35,7 @@ On top of this base: cherry-pick of `2dd3d52f9567d` (osq_lock `smp_wmb()` fix fo
 - **EDL tool + device dump**: `~/bq268-edl` — Go-based EDL backup/restore tool; `dump/` has all eMMC partitions including stock `boot.bin`
 - **Lineage/Android ref**: `~/bq268-lineage` — LineageOS/Android reference tree
 - **Learnings & architecture decisions**: see `LEARNINGS.md`
-- **Rebase analysis**: see `rebase_android_stable_4.4.md`
+- **Rebase analysis**: see `stable-upgrade-4.4.md`
 
 ## Reproducibility
 
