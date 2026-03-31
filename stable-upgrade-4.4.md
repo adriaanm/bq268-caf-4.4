@@ -2,13 +2,15 @@
 
 ## Progress
 
-- [x] 4.4.21 — base (current)
-- [ ] 4.4.50
-- [ ] 4.4.75
-- [ ] 4.4.100
-- [ ] 4.4.150
-- [ ] 4.4.200
-- [ ] 4.4.302 (EOL)
+| Target | Built | Booted | Result |
+|--------|-------|--------|--------|
+| 4.4.21 | `8954c89a355d` | Yes | **Flashed to eMMC** — this is the fallback on normal reboot |
+| 4.4.50 | | | |
+| 4.4.75 | | | |
+| 4.4.100 | | | |
+| 4.4.150 | | | |
+| 4.4.200 | | | |
+| 4.4.302 | | | |
 
 ## Goal
 
@@ -38,6 +40,10 @@ Our CAF base modifies ~635 core kernel files that upstream stable also touches (
 
 ## Workflow
 
+**Flashed kernel:** `output/boot-8954c89a355d.img` (4.4.21) is permanently flashed to the eMMC boot partition. A normal reboot always returns to this known-good kernel. New kernels are tested via `fastboot boot` (RAM, not flashed) until validated.
+
+**User availability:** The user may not be available during the porting loop. If the device is unreachable (hang, crash, powered off), **skip boot-testing and keep building**. Record the boot image filename in the progress table. When the user returns, we catch up: flash the latest good image, or bisect through saved images if something broke.
+
 Each step follows the same cycle:
 
 ```sh
@@ -49,26 +55,34 @@ git log --oneline --all --grep='Linux 4.4.50' | grep -v rt | head -1
 git merge abc1234 -m "Merge Linux 4.4.50 stable"
 # Fix any conflicts, then: git add -u && git commit
 
-# 3. Update SUBLEVEL in Makefile (merge may not update it if CAF diverged)
-# Verify: head -4 Makefile  — SUBLEVEL should match the target
+# 3. Verify SUBLEVEL in Makefile matches the target
+head -4 Makefile
+# If SUBLEVEL wasn't updated by the merge (CAF divergence), fix it manually
 
 # 4. Build
 just bootimg
+# Boot image saved as output/boot-<commit>.img automatically
 
-# 5. Deploy WiFi module to device (must match running kernel)
-scp $(arm-linux-gnueabihf-strip --strip-unneeded -o /tmp/wlan.ko output/drivers/staging/prima/wlan.ko && echo /tmp/wlan.ko) root@bq268:/lib/modules/wlan.ko
+# 5. Update progress table above with the boot image commit hash
 
-# 6. Reboot device into fastboot and boot
-just dev-reboot
-just boot
+# 6. If device is available:
+#    a. Deploy WiFi module (must match running kernel)
+#       /opt/toolchains/.../arm-linux-gnueabihf-strip --strip-unneeded \
+#         -o /tmp/wlan.ko output/drivers/staging/prima/wlan.ko
+#       scp /tmp/wlan.ko root@bq268:/lib/modules/wlan.ko
+#    b. Reboot and boot new image
+#       just dev-reboot && just boot
+#    c. Wait ~150s, then check
+#       ssh bq268 'dmesg | grep -iE "error|oops|panic" | head -20'
+#       ssh bq268 'uname -r; cat /sys/class/power_supply/battery/capacity'
+#    d. Record result in progress table
 
-# 7. Wait for serial/SSH (~150s), check dmesg
-ssh bq268 'dmesg | grep -i error | head -20'
-ssh bq268 'cat /sys/class/power_supply/battery/capacity'
-
-# 8. If device hangs — keep going. Boot images are saved as
-#    output/boot-<commit>.img and can be fastboot-booted retroactively.
+# 7. If device is NOT available:
+#    Continue to the next merge step. Images are saved and can be
+#    fastboot-booted retroactively when the device is back.
 ```
+
+**Recovery:** If the device hangs on a RAM-booted kernel, hold the power button to force reboot — it returns to the flashed 4.4.21 kernel. Then enter fastboot (hold vol-down during boot) and retry or boot a different image.
 
 If `just dev-reboot` can't reach the device (hang/crash), hold the power button to reboot, then hold vol-down during boot to enter fastboot manually. Boot the last known-good image: `fastboot boot output/boot-<good-commit>.img`.
 
