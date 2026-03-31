@@ -9,7 +9,7 @@
 | 4.4.75 | `e7a933b099c5` | | Device unreachable after reboot, needs manual boot test |
 | 4.4.100 | `ec56da4c3670` | | Device unreachable, needs manual boot test |
 | 4.4.150 | `27651e70b936` | | Device unreachable, needs manual boot test |
-| 4.4.200 | | | |
+| 4.4.200 | `f8d7e1a42f97` | | Device unreachable, needs manual boot test |
 | 4.4.302 | | | |
 
 ## Goal
