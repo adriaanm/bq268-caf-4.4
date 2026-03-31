@@ -25,12 +25,10 @@
 #include <linux/irqchip/arm-gic-v3.h>
 
 #include <asm/assembler.h>
-#include <asm/boot.h>
 #include <asm/ptrace.h>
 #include <asm/asm-offsets.h>
 #include <asm/cache.h>
 #include <asm/cputype.h>
-#include <asm/elf.h>
 #include <asm/kernel-pgtable.h>
 #include <asm/kvm_arm.h>
 #include <asm/memory.h>
@@ -70,11 +68,12 @@
  * in the entry routines.
  */
 	__HEAD
-_head:
+
 	/*
 	 * DO NOT MODIFY. Image header expected by Linux boot-loaders.
 	 */
 #ifdef CONFIG_EFI
+efi_head:
 	/*
 	 * This add instruction has no meaningful effect except that
 	 * its opcode forms the magic "MZ" signature required by UEFI.
@@ -85,9 +84,9 @@ _head:
 	b	stext				// branch to kernel start, magic
 	.long	0				// reserved
 #endif
-	le64sym	_kernel_offset_le		// Image load offset from start of RAM, little-endian
-	le64sym	_kernel_size_le			// Effective size of kernel image, little-endian
-	le64sym	_kernel_flags_le		// Informative flags, little-endian
+	.quad	_kernel_offset_le		// Image load offset from start of RAM, little-endian
+	.quad	_kernel_size_le			// Effective size of kernel image, little-endian
+	.quad	_kernel_flags_le		// Informative flags, little-endian
 	.quad	0				// reserved
 	.quad	0				// reserved
 	.quad	0				// reserved
@@ -96,12 +95,14 @@ _head:
 	.byte	0x4d
 	.byte	0x64
 #ifdef CONFIG_EFI
-	.long	pe_header - _head		// Offset to the PE header.
+	.long	pe_header - efi_head		// Offset to the PE header.
 #else
 	.word	0				// reserved
 #endif
 
 #ifdef CONFIG_EFI
+	.globl	__efistub_stext_offset
+	.set	__efistub_stext_offset, stext - efi_head
 	.align 3
 pe_header:
 	.ascii	"PE"
@@ -121,11 +122,11 @@ optional_header:
 	.short	0x20b				// PE32+ format
 	.byte	0x02				// MajorLinkerVersion
 	.byte	0x14				// MinorLinkerVersion
-	.long	_end - efi_header_end		// SizeOfCode
+	.long	_end - stext			// SizeOfCode
 	.long	0				// SizeOfInitializedData
 	.long	0				// SizeOfUninitializedData
-	.long	__efistub_entry - _head		// AddressOfEntryPoint
-	.long	efi_header_end - _head		// BaseOfCode
+	.long	__efistub_entry - efi_head	// AddressOfEntryPoint
+	.long	__efistub_stext_offset		// BaseOfCode
 
 extra_header_fields:
 	.quad	0				// ImageBase
@@ -139,10 +140,10 @@ extra_header_fields:
 	.short	0				// MinorSubsystemVersion
 	.long	0				// Win32VersionValue
 
-	.long	_end - _head			// SizeOfImage
+	.long	_end - efi_head			// SizeOfImage
 
 	// Everything before the kernel image is considered part of the header
-	.long	efi_header_end - _head		// SizeOfHeaders
+	.long	__efistub_stext_offset		// SizeOfHeaders
 	.long	0				// CheckSum
 	.short	0xa				// Subsystem (EFI application)
 	.short	0				// DllCharacteristics
@@ -186,10 +187,10 @@ section_table:
 	.byte	0
 	.byte	0
 	.byte	0        		// end of 0 padding of section name
-	.long	_end - efi_header_end	// VirtualSize
-	.long	efi_header_end - _head	// VirtualAddress
-	.long	_edata - efi_header_end	// SizeOfRawData
-	.long	efi_header_end - _head	// PointerToRawData
+	.long	_end - stext		// VirtualSize
+	.long	__efistub_stext_offset	// VirtualAddress
+	.long	_edata - stext		// SizeOfRawData
+	.long	__efistub_stext_offset	// PointerToRawData
 
 	.long	0		// PointerToRelocations (0 for executables)
 	.long	0		// PointerToLineNumbers (0 for executables)
@@ -198,23 +199,19 @@ section_table:
 	.long	0xe0500020	// Characteristics (section flags)
 
 	/*
-	 * EFI will load .text onwards at the 4k section alignment
+	 * EFI will load stext onwards at the 4k section alignment
 	 * described in the PE/COFF header. To ensure that instruction
 	 * sequences using an adrp and a :lo12: immediate will function
-	 * correctly at this alignment, we must ensure that .text is
+	 * correctly at this alignment, we must ensure that stext is
 	 * placed at a 4k boundary in the Image to begin with.
 	 */
 	.align 12
-efi_header_end:
 #endif
-
-	__INIT
 
 ENTRY(stext)
 	bl	preserve_boot_args
 	bl	el2_setup			// Drop to EL1, w20=cpu_boot_mode
 	adrp	x24, __PHYS_OFFSET
-	and	x23, x24, MIN_KIMG_ALIGN - 1	// KASLR offset, defaults to 0
 	bl	set_cpu_boot_mode_flag
 	bl	__create_page_tables		// x25=TTBR0, x26=TTBR1
 	/*
@@ -223,10 +220,10 @@ ENTRY(stext)
 	 * On return, the CPU will be ready for the MMU to be turned on and
 	 * the TCR will have been set.
 	 */
-	bl	__cpu_setup			// initialise processor
-	adr_l	x27, __primary_switch		// address to jump to after
+	ldr	x27, =__mmap_switched		// address to jump to after
 						// MMU has been enabled
-	b	__enable_mmu
+	adr_l	lr, __enable_mmu		// return (PIC) address
+	b	__cpu_setup			// initialise processor
 ENDPROC(stext)
 
 /*
@@ -315,7 +312,7 @@ ENDPROC(preserve_boot_args)
 __create_page_tables:
 	adrp	x25, idmap_pg_dir
 	adrp	x26, swapper_pg_dir
-	mov	x28, lr
+	mov	x27, lr
 
 	/*
 	 * Invalidate the idmap and swapper page tables to avoid potential
@@ -337,7 +334,7 @@ __create_page_tables:
 	cmp	x0, x6
 	b.lo	1b
 
-	mov	x7, SWAPPER_MM_MMUFLAGS
+	ldr	x7, =SWAPPER_MM_MMUFLAGS
 
 	/*
 	 * Create the identity mapping.
@@ -393,13 +390,10 @@ __create_page_tables:
 	 * Map the kernel image (starting with PHYS_OFFSET).
 	 */
 	mov	x0, x26				// swapper_pg_dir
-	mov_q	x5, KIMAGE_VADDR + TEXT_OFFSET	// compile time __va(_text)
-	add	x5, x5, x23			// add KASLR displacement
+	mov	x5, #PAGE_OFFSET
 	create_pgd_entry x0, x5, x3, x6
-	adrp	x6, _end			// runtime __pa(_end)
-	adrp	x3, _text			// runtime __pa(_text)
-	sub	x6, x6, x3			// _end - _text
-	add	x6, x6, x5			// runtime __va(_end)
+	ldr	x6, =KERNEL_END			// __va(KERNEL_END)
+	mov	x3, x24				// phys offset
 	create_block_map x0, x7, x3, x5, x6
 
 	/*
@@ -412,7 +406,8 @@ __create_page_tables:
 	dmb	sy
 	bl	__inval_cache_range
 
-	ret	x28
+	mov	lr, x27
+	ret
 ENDPROC(__create_page_tables)
 	.ltorg
 
@@ -420,58 +415,31 @@ ENDPROC(__create_page_tables)
  * The following fragment of code is executed with the MMU enabled.
  */
 	.set	initial_sp, init_thread_union + THREAD_START_SP
-__primary_switched:
-	mov	x28, lr				// preserve LR
-	adr_l	x8, vectors			// load VBAR_EL1 with virtual
-	msr	vbar_el1, x8			// vector table address
-	isb
+__mmap_switched:
+	adr_l	x6, __bss_start
+	adr_l	x7, __bss_stop
 
-	// Clear BSS
-	adr_l	x0, __bss_start
-	mov	x1, xzr
-	adr_l	x2, __bss_stop
-	sub	x2, x2, x0
-	bl	__pi_memset
-	dsb	ishst				// Make zero page visible to PTW
-
-	adr_l	sp, initial_sp, x4
-	mov	x4, sp
-	and	x4, x4, #~(THREAD_SIZE - 1)
-	msr	sp_el0, x4			// Save thread_info
+1:	cmp	x6, x7
+	b.hs	2f
+	str	xzr, [x6], #8			// Clear BSS
+	b	1b
+2:
+	adrp	x4, initial_sp
+	add	sp, x4, :lo12:initial_sp
 	str_l	x21, __fdt_pointer, x5		// Save FDT pointer
-
-	ldr_l	x4, kimage_vaddr		// Save the offset between
-	sub	x4, x4, x24			// the kernel virtual and
-	str_l	x4, kimage_voffset, x5		// physical mappings
-
+	str_l	x24, memstart_addr, x6		// Save PHYS_OFFSET
 	mov	x29, #0
 #ifdef CONFIG_KASAN
 	bl	kasan_early_init
 #endif
-#ifdef CONFIG_RANDOMIZE_BASE
-	tst	x23, ~(MIN_KIMG_ALIGN - 1)	// already running randomized?
-	b.ne	0f
-	mov	x0, x21				// pass FDT address in x0
-	mov	x1, x23				// pass modulo offset in x1
-	bl	kaslr_early_init		// parse FDT for KASLR options
-	cbz	x0, 0f				// KASLR disabled? just proceed
-	orr	x23, x23, x0			// record KASLR offset
-	ret	x28				// we must enable KASLR, return
-						// to __enable_mmu()
-0:
-#endif
 	b	start_kernel
-ENDPROC(__primary_switched)
+ENDPROC(__mmap_switched)
 
 /*
  * end early head section, begin head code that is also used for
  * hotplug and needs to have the same protections as the text region
  */
 	.section ".text","ax"
-
-ENTRY(kimage_vaddr)
-	.quad		_text - TEXT_OFFSET
-
 /*
  * If we're fortunate enough to boot at EL2, ensure that the world is
  * sane before dropping to EL1.
@@ -577,7 +545,7 @@ ENDPROC(el2_setup)
  * Sets the __boot_cpu_mode flag depending on the CPU boot mode passed
  * in x20. See arch/arm64/include/asm/virt.h for more info.
  */
-set_cpu_boot_mode_flag:
+ENTRY(set_cpu_boot_mode_flag)
 	adr_l	x1, __boot_cpu_mode
 	cmp	w20, #BOOT_CPU_MODE_EL2
 	b.ne	1f
@@ -610,7 +578,7 @@ ENTRY(secondary_holding_pen)
 	bl	el2_setup			// Drop to EL1, w20=cpu_boot_mode
 	bl	set_cpu_boot_mode_flag
 	mrs	x0, mpidr_el1
-	mov_q	x1, MPIDR_HWID_BITMASK
+	ldr     x1, =MPIDR_HWID_BITMASK
 	and	x0, x0, x1
 	adr_l	x3, secondary_holding_pen_release
 pen:	ldr	x4, [x3]
@@ -630,7 +598,7 @@ ENTRY(secondary_entry)
 	b	secondary_startup
 ENDPROC(secondary_entry)
 
-secondary_startup:
+ENTRY(secondary_startup)
 	/*
 	 * Common entry point for secondary CPUs.
 	 */
@@ -638,19 +606,14 @@ secondary_startup:
 	adrp	x26, swapper_pg_dir
 	bl	__cpu_setup			// initialise processor
 
-	adr_l	x27, __secondary_switch		// address to jump to after enabling the MMU
+	ldr	x21, =secondary_data
+	ldr	x27, =__secondary_switched	// address to jump to after enabling the MMU
 	b	__enable_mmu
 ENDPROC(secondary_startup)
 
-__secondary_switched:
-	adr_l	x5, vectors
-	msr	vbar_el1, x5
-	isb
-
-	ldr_l	x0, secondary_data		// get secondary_data.stack
+ENTRY(__secondary_switched)
+	ldr	x0, [x21]			// get secondary_data.stack
 	mov	sp, x0
-	and	x0, x0, #~(THREAD_SIZE - 1)
-	msr	sp_el0, x0			// save thread_info
 	mov	x29, #0
 	b	secondary_start_kernel
 ENDPROC(__secondary_switched)
@@ -668,11 +631,12 @@ ENDPROC(__secondary_switched)
  */
 	.section	".idmap.text", "ax"
 __enable_mmu:
-	mrs	x18, sctlr_el1			// preserve old SCTLR_EL1 value
 	mrs	x1, ID_AA64MMFR0_EL1
 	ubfx	x2, x1, #ID_AA64MMFR0_TGRAN_SHIFT, 4
 	cmp	x2, #ID_AA64MMFR0_TGRAN_SUPPORTED
 	b.ne	__no_granule_support
+	ldr	x5, =vectors
+	msr	vbar_el1, x5
 	msr	ttbr0_el1, x25			// load TTBR0
 	msr	ttbr1_el1, x26			// load TTBR1
 	isb
@@ -686,25 +650,6 @@ __enable_mmu:
 	ic	iallu
 	dsb	nsh
 	isb
-#ifdef CONFIG_RANDOMIZE_BASE
-	mov	x19, x0				// preserve new SCTLR_EL1 value
-	blr	x27
-
-	/*
-	 * If we return here, we have a KASLR displacement in x23 which we need
-	 * to take into account by discarding the current kernel mapping and
-	 * creating a new one.
-	 */
-	msr	sctlr_el1, x18			// disable the MMU
-	isb
-	bl	__create_page_tables		// recreate kernel mapping
-
-	msr	sctlr_el1, x19			// re-enable the MMU
-	isb
-	ic	iallu				// flush instructions fetched
-	dsb	nsh				// via old mapping
-	isb
-#endif
 	br	x27
 ENDPROC(__enable_mmu)
 
@@ -712,38 +657,3 @@ __no_granule_support:
 	wfe
 	b __no_granule_support
 ENDPROC(__no_granule_support)
-
-__primary_switch:
-#ifdef CONFIG_RELOCATABLE
-	/*
-	 * Iterate over each entry in the relocation table, and apply the
-	 * relocations in place.
-	 */
-	ldr	w9, =__rela_offset		// offset to reloc table
-	ldr	w10, =__rela_size		// size of reloc table
-
-	mov_q	x11, KIMAGE_VADDR		// default virtual offset
-	add	x11, x11, x23			// actual virtual offset
-	add	x9, x9, x11			// __va(.rela)
-	add	x10, x9, x10			// __va(.rela) + sizeof(.rela)
-
-0:	cmp	x9, x10
-	b.hs	1f
-	ldp	x11, x12, [x9], #24
-	ldr	x13, [x9, #-8]
-	cmp	w12, #R_AARCH64_RELATIVE
-	b.ne	0b
-	add	x13, x13, x23			// relocate
-	str	x13, [x11, x23]
-	b	0b
-
-1:
-#endif
-	ldr	x8, =__primary_switched
-	br	x8
-ENDPROC(__primary_switch)
-
-__secondary_switch:
-	ldr	x8, =__secondary_switched
-	br	x8
-ENDPROC(__secondary_switch)
