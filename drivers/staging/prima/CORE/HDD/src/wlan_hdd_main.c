@@ -9871,8 +9871,7 @@ void hdd_connect_result(struct net_device *dev,
    }
 
    cfg80211_connect_bss(dev, bssid, bss, req_ie, req_ie_len,
-        resp_ie, resp_ie_len, status, gfp,
-        NL80211_TIMEOUT_UNSPECIFIED);
+        resp_ie, resp_ie_len, status, gfp);
 }
 #else
 void hdd_connect_result(struct net_device *dev,
