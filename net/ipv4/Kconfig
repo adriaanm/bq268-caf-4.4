@@ -310,7 +310,7 @@ config NET_IPVTI
 	  on top.
 
 config NET_UDP_TUNNEL
-	tristate
+	tristate "IP: UDP tunnel support"
 	select NET_IP_TUNNEL
 	default n
 
