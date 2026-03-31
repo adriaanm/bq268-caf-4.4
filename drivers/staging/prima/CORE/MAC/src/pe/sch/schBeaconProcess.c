@@ -281,7 +281,10 @@ static void __schBeaconProcessNoSession(tpAniSirGlobal pMac, tpSchBeaconStruct p
     //If station(STA/BT-STA/BT-AP/IBSS) mode, Always save the beacon in the scan results, if atleast one session is active
     //schBeaconProcessNoSession will be called only when there is atleast one session active, so not checking 
     //it again here.
-    limCheckAndAddBssDescription(pMac, pBeacon, pRxPacketInfo, eANI_BOOLEAN_FALSE, eANI_BOOLEAN_FALSE);
+    if (WDA_GET_OFFLOADSCANLEARN(pRxPacketInfo) || pMac->fScanOffload)
+        limCheckAndAddBssDescription(pMac, pBeacon, pRxPacketInfo,
+                                     eANI_BOOLEAN_FALSE, eANI_BOOLEAN_FALSE);
+
     return;  
 }
 
@@ -380,9 +383,14 @@ static void __schBeaconProcessForSession( tpAniSirGlobal      pMac,
            goto fail;
         }
 
-        if( RF_CHAN_14 >= psessionEntry->currentOperChannel )
+        if(RF_CHAN_14 >= psessionEntry->currentOperChannel)
         {
-           channelBondingMode = pMac->roam.configParam.channelBondingMode24GHz;
+            if (psessionEntry->force_24ghz_in_ht20)
+                channelBondingMode =
+                     WNI_CFG_CHANNEL_BONDING_MODE_DISABLE;
+            else
+                channelBondingMode =
+                     pMac->roam.configParam.channelBondingMode24GHz;
         }
         else
         {
@@ -480,7 +488,8 @@ static void __schBeaconProcessForSession( tpAniSirGlobal      pMac,
     {
         /* Channel Switch information element updated */
         if(pBeacon->channelSwitchPresent ||
-            pBeacon->propIEinfo.propChannelSwitchPresent)
+            pBeacon->propIEinfo.propChannelSwitchPresent ||
+            pBeacon->ecsa_present)
         {
             limUpdateChannelSwitch(pMac, pBeacon, psessionEntry);
         }
@@ -749,10 +758,6 @@ void schBeaconProcess(tpAniSirGlobal pMac, tANI_U8* pRxPacketInfo, tpPESession p
             limParseBeaconForTim(pMac, (tANI_U8 *) pRxPacketInfo, psessionEntry);
 
         return;
-    }
-    if (beaconStruct.ssidPresent)
-    {
-        beaconStruct.ssId.ssId[beaconStruct.ssId.length] = 0;
     }
 
     /*

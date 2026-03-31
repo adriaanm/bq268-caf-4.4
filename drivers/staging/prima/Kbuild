@@ -508,8 +508,7 @@ INCS :=		$(BAP_INC) \
 		$(WDA_INC) \
 		$(WDI_INC)
 
-OBJS :=		$(BAP_OBJS) \
-		$(DXE_OBJS) \
+OBJS :=		$(DXE_OBJS) \
 		$(HDD_OBJS) \
 		$(MAC_OBJS) \
 		$(SAP_OBJS) \

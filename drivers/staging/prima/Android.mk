@@ -24,8 +24,12 @@ ifeq ($(TARGET_SUPPORTS_WEARABLES),true)
 ifneq ($(findstring device,$(LOCAL_PATH)),)
     WLAN_DLKM := 1
 else
+ifneq ($(findstring vendor,$(LOCAL_PATH)),)
+    WLAN_DLKM := 1
+else
     WLAN_DLKM := 0
 endif # findstring device
+endif
 else
 ifneq ($(findstring vendor,$(LOCAL_PATH)),)
     WLAN_DLKM := 1
@@ -42,16 +46,6 @@ ifneq ($(findstring opensource,$(LOCAL_PATH)),)
     WLAN_PROPRIETARY := 0
 else
     WLAN_PROPRIETARY := 1
-endif
-
-ifeq ($(WLAN_PROPRIETARY),1)
-    WLAN_BLD_DIR := vendor/qcom/proprietary/wlan
-else
-ifneq ($(TARGET_SUPPORTS_WEARABLES),true)
-    WLAN_BLD_DIR := vendor/qcom/opensource/wlan
-else
-    WLAN_BLD_DIR := device/qcom/msm8909w/opensource/wlan
-endif
 endif
 
 # DLKM_DIR was moved for JELLY_BEAN (PLATFORM_SDK 16)
@@ -115,7 +109,13 @@ endif
 ###########################################################
 
 # This is set once per LOCAL_PATH, not per (kernel) module
-KBUILD_OPTIONS := WLAN_ROOT=$(KERNEL_TO_BUILD_ROOT_OFFSET)$(WLAN_BLD_DIR)/prima
+
+ifeq ($(KBUILD_OPTIONS),)
+KBUILD_OPTIONS += WLAN_PROPRIETARY=$(WLAN_PROPRIETARY)
+KBUILD_OPTIONS += TARGET_SUPPORTS_WEARABLES=$(TARGET_SUPPORTS_WEARABLES)
+KBUILD_OPTIONS += KERNEL_TO_BUILD_ROOT_OFFSET=$(KERNEL_TO_BUILD_ROOT_OFFSET)
+endif
+
 # We are actually building wlan.ko here, as per the
 # requirement we are specifying <chipset>_wlan.ko as LOCAL_MODULE.
 # This means we need to rename the module to <chipset>_wlan.ko
@@ -125,8 +125,13 @@ KBUILD_OPTIONS += BOARD_PLATFORM=$(TARGET_BOARD_PLATFORM)
 KBUILD_OPTIONS += $(WLAN_SELECT)
 
 
+ifeq ($(KERNEL_TO_BUILD_ROOT_OFFSET),../../)
+VERSION=$(shell grep -w "VERSION =" $(TOP)/kernel/msm-$(TARGET_KERNEL_VERSION)/Makefile | sed 's/^VERSION = //' )
+PATCHLEVEL=$(shell grep -w "PATCHLEVEL =" $(TOP)/kernel/msm-$(TARGET_KERNEL_VERSION)/Makefile | sed 's/^PATCHLEVEL = //' )
+else
 VERSION=$(shell grep -w "VERSION =" $(TOP)/kernel/Makefile | sed 's/^VERSION = //' )
 PATCHLEVEL=$(shell grep -w "PATCHLEVEL =" $(TOP)/kernel/Makefile | sed 's/^PATCHLEVEL = //' )
+endif
 
 include $(CLEAR_VARS)
 LOCAL_MODULE              := $(WLAN_CHIPSET)_wlan.ko
@@ -134,9 +139,13 @@ LOCAL_MODULE_KBUILD_NAME  := wlan.ko
 LOCAL_MODULE_TAGS         := debug
 LOCAL_MODULE_DEBUG_ENABLE := true
 ifeq ($(PRODUCT_VENDOR_MOVE_ENABLED), true)
-LOCAL_MODULE_PATH         := $(TARGET_OUT_VENDOR)/lib/modules/$(WLAN_CHIPSET)
+    ifeq ($(WIFI_DRIVER_INSTALL_TO_KERNEL_OUT),true)
+        LOCAL_MODULE_PATH := $(KERNEL_MODULES_OUT)
+    else
+        LOCAL_MODULE_PATH := $(TARGET_OUT_VENDOR)/lib/modules/$(WLAN_CHIPSET)
+    endif
 else
-LOCAL_MODULE_PATH         := $(TARGET_OUT)/lib/modules/$(WLAN_CHIPSET)
+    LOCAL_MODULE_PATH         := $(TARGET_OUT)/lib/modules/$(WLAN_CHIPSET)
 endif # PRODUCT_VENDOR_MOVE_ENABLED
 include $(DLKM_DIR)/AndroidKernelModule.mk
 ###########################################################

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2013, 2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2013, 2017-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -173,6 +173,7 @@ limProcessAssocReqFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo,
     tANI_U8                 *pBody;
     tANI_U16                peerIdx, temp;
     tANI_U32                val;
+    tANI_U16                prevAuthSeqno = 0xFFFF;
     tANI_S32                framelen;
     tSirRetStatus           status;
     tpSirMacMgmtHdr         pHdr;
@@ -219,7 +220,6 @@ limProcessAssocReqFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo,
         WDA_GET_RX_MPDU_DATA(pRxPacketInfo), framelen);
         return;
     }
-
     /*
      * If a STA is already present in DPH and it
      * is initiating a Assoc re-transmit, do not
@@ -233,7 +233,8 @@ limProcessAssocReqFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo,
                              &psessionEntry->dph.dphHashTable);
     if (NULL != pStaDs)
     {
-        if (pHdr->fc.retry > 0)
+        if (pStaDs->PrevAssocSeqno == ((pHdr->seqControl.seqNumHi << 4) |
+                                        (pHdr->seqControl.seqNumLo)))
         {
             /* Ignore the Retry */
             limLog(pMac, LOGE,
@@ -889,6 +890,11 @@ limProcessAssocReqFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo,
 
         /// Delete 'pre-auth' context of STA
         authType = pStaPreAuthContext->authType;
+
+        /// Store the previous auth frame's seq no
+        prevAuthSeqno = pStaPreAuthContext->seqNo;
+
+
         limDeletePreAuthNode(pMac, pHdr->sa);
 
         // All is well. Assign AID (after else part)
@@ -1129,6 +1135,16 @@ limProcessAssocReqFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo,
         goto error;
     }
 
+     /// Store the previous auth frame's seq no
+    if (prevAuthSeqno != 0xFFFF)
+    {
+        pStaDs->PrevAuthSeqno = prevAuthSeqno;
+    }
+     /// Store the current assoc seq no
+    pStaDs->PrevAssocSeqno = ((pHdr->seqControl.seqNumHi << 4) |
+                              (pHdr->seqControl.seqNumLo));
+    limLog(pMac, LOG1, FL("Prev auth seq no %d Prev Assoc seq no. %d"),
+                          pStaDs->PrevAuthSeqno, pStaDs->PrevAssocSeqno);
 
 sendIndToSme:
 
@@ -1504,7 +1520,7 @@ error:
 \param  pMac
 \param  *pStaDs - Station DPH hash entry
 \param  psessionEntry - PE session entry
-\return None
+\return tSirRetStatus
 
  * ?????? How do I get 
  *  - subtype   =====> psessionEntry->parsedAssocReq.reassocRequest
@@ -1514,7 +1530,7 @@ error:
  *  - pHdr->seqControl  =====> no longer needed
  *  - pStaDs
 ------------------------------------------------------------------*/
-void limSendMlmAssocInd(tpAniSirGlobal pMac, tpDphHashNode pStaDs, tpPESession psessionEntry)
+tSirRetStatus limSendMlmAssocInd(tpAniSirGlobal pMac, tpDphHashNode pStaDs, tpPESession psessionEntry)
 {
     tpLimMlmAssocInd        pMlmAssocInd = NULL;
     tpLimMlmReassocInd      pMlmReassocInd;
@@ -1553,7 +1569,7 @@ void limSendMlmAssocInd(tpAniSirGlobal pMac, tpDphHashNode pStaDs, tpPESession p
         {
             limReleasePeerIdx(pMac, pStaDs->assocId, psessionEntry);
             limLog(pMac, LOGP, FL("AllocateMemory failed for pMlmAssocInd"));
-            return;
+            return eSIR_MEM_ALLOC_FAILED;
         }
         vos_mem_set(pMlmAssocInd, temp ,0);
 
@@ -1606,7 +1622,7 @@ void limSendMlmAssocInd(tpAniSirGlobal pMac, tpDphHashNode pStaDs, tpPESession p
                 PELOGE(limLog(pMac, LOGE, FL("rsnIEdata index out of bounds %d"),
                                               pMlmAssocInd->rsnIE.length);)
                 vos_mem_free(pMlmAssocInd);
-                return;
+                return eSIR_FAILURE;
             }
             pMlmAssocInd->rsnIE.rsnIEdata[pMlmAssocInd->rsnIE.length] = SIR_MAC_WPA_EID;
             pMlmAssocInd->rsnIE.rsnIEdata[pMlmAssocInd->rsnIE.length + 1] = pAssocReq->wpa.length;
@@ -1663,6 +1679,52 @@ void limSendMlmAssocInd(tpAniSirGlobal pMac, tpDphHashNode pStaDs, tpPESession p
         pMlmAssocInd->beaconPtr = psessionEntry->beacon;
         pMlmAssocInd->beaconLength = psessionEntry->bcnLen;
 
+        pMlmAssocInd->chan_info.chan_id = psessionEntry->currentOperChannel;
+
+        if (psessionEntry->limRFBand == SIR_BAND_2_4_GHZ) {
+            if (psessionEntry->vhtCapability && pAssocReq->VHTCaps.present) {
+                pMlmAssocInd->chan_info.info = MODE_11AC_VHT20_2G;
+                pMlmAssocInd->VHTCaps = pAssocReq->VHTCaps;
+            } else if (psessionEntry->htCapability &&
+                                                 pAssocReq->HTCaps.present) {
+                pMlmAssocInd->chan_info.info = MODE_11NG_HT20;
+                pMlmAssocInd->HTCaps = pAssocReq->HTCaps;
+            } else if (pStaDs->supportedRates.llaRates[0]) {
+                pMlmAssocInd->chan_info.info = MODE_11G;
+            } else {
+                pMlmAssocInd->chan_info.info = MODE_11B;
+            }
+        } else {
+            if (psessionEntry->vhtCapability && pAssocReq->VHTCaps.present) {
+                if ((psessionEntry->vhtTxChannelWidthSet ==
+                                                eHT_CHANNEL_WIDTH_80MHZ) &&
+                                 pAssocReq->HTCaps.supportedChannelWidthSet) {
+                    pMlmAssocInd->chan_info.info = MODE_11AC_VHT80;
+                } else if ((psessionEntry->vhtTxChannelWidthSet ==
+                                                eHT_CHANNEL_WIDTH_40MHZ) &&
+                                  pAssocReq->HTCaps.supportedChannelWidthSet) {
+                    pMlmAssocInd->chan_info.info = MODE_11AC_VHT40;
+                } else
+                    pMlmAssocInd->chan_info.info = MODE_11AC_VHT20;
+                    pMlmAssocInd->VHTCaps = pAssocReq->VHTCaps;
+            } else if (psessionEntry->htCapability &&
+                                pAssocReq->HTCaps.present) {
+                if ((psessionEntry->vhtTxChannelWidthSet ==
+                                                eHT_CHANNEL_WIDTH_40MHZ) &&
+                                  pAssocReq->HTCaps.supportedChannelWidthSet) {
+                    pMlmAssocInd->chan_info.info = MODE_11NA_HT40;
+                } else
+                    pMlmAssocInd->chan_info.info = MODE_11NA_HT20;
+                pMlmAssocInd->HTCaps = pAssocReq->HTCaps;
+            } else
+                pMlmAssocInd->chan_info.info = MODE_11A;
+        }
+
+        pMlmAssocInd->ch_width = eHT_CHANNEL_WIDTH_20MHZ;
+        if (pStaDs->mlmStaContext.htCapability)
+            pMlmAssocInd->ch_width = pStaDs->htSupportedChannelWidthSet ?
+                            eHT_CHANNEL_WIDTH_40MHZ : eHT_CHANNEL_WIDTH_20MHZ;
+
         pMlmAssocInd->rate_flags =
             limGetMaxRateFlags(pStaDs, psessionEntry);
 
@@ -1680,7 +1742,7 @@ void limSendMlmAssocInd(tpAniSirGlobal pMac, tpDphHashNode pStaDs, tpPESession p
             limLog(pMac, LOGP, FL("call to AllocateMemory failed for "
                                   "pMlmReassocInd"));
             limReleasePeerIdx(pMac, pStaDs->assocId, psessionEntry);
-            return;
+            return eSIR_MEM_ALLOC_FAILED;
         }
         vos_mem_set(pMlmReassocInd, temp, 0);
 
@@ -1804,6 +1866,6 @@ void limSendMlmAssocInd(tpAniSirGlobal pMac, tpDphHashNode pStaDs, tpPESession p
         vos_mem_free(pMlmReassocInd);
     }
 
-    return;
+    return eSIR_SUCCESS;
 
 } /*** end limSendMlmAssocInd() ***/

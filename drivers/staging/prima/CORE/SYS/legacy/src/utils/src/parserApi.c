@@ -295,6 +295,32 @@ PopulateDot11fCapabilities2(tpAniSirGlobal         pMac,
 
 } // End PopulateDot11fCapabilities2.
 
+void populate_dot11f_ext_chann_switch_ann(tpAniSirGlobal mac_ctx,
+            tDot11fIEext_chan_switch_ann *dot_11_ptr, tpPESession session_entry)
+{
+   offset_t ch_offset;
+
+   if (session_entry->gLimChannelSwitch.secondarySubBand >=
+       PHY_QUADRUPLE_CHANNEL_20MHZ_LOW_40MHZ_CENTERED)
+         ch_offset = BW80;
+   else
+         ch_offset = session_entry->gLimChannelSwitch.secondarySubBand;
+
+   dot_11_ptr->switch_mode = session_entry->gLimChannelSwitch.switchMode;
+   dot_11_ptr->new_reg_class = limGetOPClassFromChannel(
+         mac_ctx->scan.countryCodeCurrent,
+         session_entry->gLimChannelSwitch.primaryChannel, ch_offset);
+   dot_11_ptr->new_channel = session_entry->gLimChannelSwitch.primaryChannel;
+   dot_11_ptr->switch_count = session_entry->gLimChannelSwitch.switchCount;
+   dot_11_ptr->present = 1;
+
+   limLog(mac_ctx, LOG1, FL("country:%s cb mode:%d width:%d reg:%d off:%d"),
+          mac_ctx->scan.countryCodeCurrent,
+          session_entry->gLimChannelSwitch.primaryChannel,
+          session_entry->gLimChannelSwitch.secondarySubBand,
+          dot_11_ptr->new_reg_class, ch_offset);
+}
+
 void
 PopulateDot11fChanSwitchAnn(tpAniSirGlobal          pMac,
                             tDot11fIEChanSwitchAnn *pDot11f,
@@ -308,8 +334,8 @@ PopulateDot11fChanSwitchAnn(tpAniSirGlobal          pMac,
 } // End PopulateDot11fChanSwitchAnn.
 
 void
-PopulateDot11fExtChanSwitchAnn(tpAniSirGlobal pMac,
-                               tDot11fIEExtChanSwitchAnn *pDot11f,
+PopulateDot11fsecChanOffset(tpAniSirGlobal pMac,
+                               tDot11fIEsec_chan_offset *pDot11f,
                                tpPESession psessionEntry)
 {
     //Has to be updated on the cb state basis
@@ -329,6 +355,9 @@ PopulateDot11fWiderBWChanSwitchAnn(tpAniSirGlobal pMac,
     pDot11f->newChanWidth = psessionEntry->gLimWiderBWChannelSwitch.newChanWidth;
     pDot11f->newCenterChanFreq0 = psessionEntry->gLimWiderBWChannelSwitch.newCenterChanFreq0;
     pDot11f->newCenterChanFreq1 = psessionEntry->gLimWiderBWChannelSwitch.newCenterChanFreq1;
+    limLog(pMac, LOG1, FL("wrapper: width:%d f0:%d f1:%d"),
+           pDot11f->newChanWidth, pDot11f->newCenterChanFreq0,
+           pDot11f->newCenterChanFreq1);
 }
 #endif
 
@@ -598,7 +627,7 @@ PopulateDot11fHTCaps(tpAniSirGlobal           pMac,
 
     uHTCapabilityInfo.nCfgValue16 = nCfgValue & 0xFFFF;
 
-
+    pDot11f->advCodingCap             = uHTCapabilityInfo.htCapInfo.advCodingCap;
     pDot11f->mimoPowerSave            = uHTCapabilityInfo.htCapInfo.mimoPowerSave;
     pDot11f->greenField               = uHTCapabilityInfo.htCapInfo.greenField;
     pDot11f->shortGI20MHz             = uHTCapabilityInfo.htCapInfo.shortGI20MHz;
@@ -616,15 +645,10 @@ PopulateDot11fHTCaps(tpAniSirGlobal           pMac,
     if (psessionEntry == NULL) // Only in case of NO session
     {
         pDot11f->supportedChannelWidthSet = uHTCapabilityInfo.htCapInfo.supportedChannelWidthSet;
-        pDot11f->advCodingCap = uHTCapabilityInfo.htCapInfo.advCodingCap;
     }
     else
     {
         pDot11f->supportedChannelWidthSet = psessionEntry->htSupportedChannelWidthSet;
-        if (psessionEntry->txLdpcIniFeatureEnabled & 0x1)
-            pDot11f->advCodingCap = 1;
-        else
-            pDot11f->advCodingCap = 0;
     }
 
     /* Ensure that shortGI40MHz is Disabled if supportedChannelWidthSet is
@@ -818,10 +842,7 @@ PopulateDot11fVHTCaps(tpAniSirGlobal           pMac,
 
     nCfgValue = 0;
     CFG_GET_INT( nStatus, pMac, WNI_CFG_VHT_LDPC_CODING_CAP, nCfgValue );
-    if (nCfgValue & 0x2)
-        pDot11f->ldpcCodingCap = 1;
-    else
-        pDot11f->ldpcCodingCap = 0;
+    pDot11f->ldpcCodingCap = (nCfgValue & 0x0001);
 
     nCfgValue = 0;
     CFG_GET_INT( nStatus, pMac, WNI_CFG_VHT_SHORT_GI_80MHZ, nCfgValue );
@@ -1088,6 +1109,8 @@ PopulateDot11fExtCap(tpAniSirGlobal      pMac,
            pDot11f->present = 1;
        }
     }
+
+    p_ext_cap->fils_capability = 0;
 
     if (pDot11f->present)
     {
@@ -1386,7 +1409,7 @@ PopulateDot11fRSN(tpAniSirGlobal  pMac,
                                     pRsnIe->rsnIEdata + idx + 2, //EID, length
                                     pRsnIe->rsnIEdata[ idx + 1 ],
                                     pDot11f );
-        if ( DOT11F_FAILED( status ) )
+        if (!DOT11F_SUCCEEDED(status))
         {
             dot11fLog( pMac, LOGE, FL("Parse failure in PopulateDot11fRS"
                                    "N (0x%08x)."),
@@ -2285,14 +2308,21 @@ tSirRetStatus sirConvertProbeFrame2Struct(tpAniSirGlobal       pMac,
     {
         pProbeResp->channelSwitchPresent = 1;
         vos_mem_copy( &pProbeResp->channelSwitchIE, &pr->ChanSwitchAnn,
-                       sizeof(tDot11fIEExtChanSwitchAnn) );
+                       sizeof(tDot11fIEChanSwitchAnn) );
     }
 
-       if ( pr->ExtChanSwitchAnn.present )
+       if ( pr->sec_chan_offset.present )
     {
-        pProbeResp->extChannelSwitchPresent = 1;
-        vos_mem_copy ( &pProbeResp->extChannelSwitchIE, &pr->ExtChanSwitchAnn,
-                       sizeof(tDot11fIEExtChanSwitchAnn) );
+        pProbeResp->sec_chan_offset_present = 1;
+        vos_mem_copy ( &pProbeResp->sec_chan_offset, &pr->sec_chan_offset,
+                       sizeof(tDot11fIEsec_chan_offset) );
+    }
+    if (pr->ext_chan_switch_ann.present)
+    {
+        pProbeResp->ecsa_present = 1;
+        vos_mem_copy(&pProbeResp->ext_chan_switch_ann,
+                     &pr->ext_chan_switch_ann,
+                     sizeof(tDot11fIEext_chan_switch_ann));
     }
 
     if( pr->TPCReport.present)
@@ -3426,11 +3456,18 @@ sirParseBeaconIE(tpAniSirGlobal        pMac,
                       sizeof(tDot11fIEChanSwitchAnn));
     }
 
-    if ( pBies->ExtChanSwitchAnn.present)
+    if ( pBies->sec_chan_offset.present)
     {
-        pBeaconStruct->extChannelSwitchPresent= 1;
-        vos_mem_copy( &pBeaconStruct->extChannelSwitchIE, &pBies->ExtChanSwitchAnn,
-                      sizeof(tDot11fIEExtChanSwitchAnn));
+        pBeaconStruct->sec_chan_offset_present= 1;
+        vos_mem_copy( &pBeaconStruct->sec_chan_offset, &pBies->sec_chan_offset,
+                      sizeof(tDot11fIEsec_chan_offset));
+    }
+    if (pBies->ext_chan_switch_ann.present)
+    {
+        pBeaconStruct->ecsa_present = 1;
+        vos_mem_copy(&pBeaconStruct->ext_chan_switch_ann,
+                     &pBies->ext_chan_switch_ann,
+                     sizeof(tDot11fIEext_chan_switch_ann));
     }
 
     if ( pBies->Quiet.present )
@@ -3673,12 +3710,18 @@ sirConvertBeaconFrame2Struct(tpAniSirGlobal       pMac,
         vos_mem_copy( &pBeaconStruct->channelSwitchIE, &pBeacon->ChanSwitchAnn,
                                                        sizeof(tDot11fIEChanSwitchAnn) );
     }
-
-    if ( pBeacon->ExtChanSwitchAnn.present )
+    if ( pBeacon->sec_chan_offset.present )
     {
-        pBeaconStruct->extChannelSwitchPresent = 1;
-        vos_mem_copy( &pBeaconStruct->extChannelSwitchIE, &pBeacon->ExtChanSwitchAnn,
-                                                       sizeof(tDot11fIEExtChanSwitchAnn) );
+        pBeaconStruct->sec_chan_offset_present = 1;
+        vos_mem_copy(&pBeaconStruct->sec_chan_offset, &pBeacon->sec_chan_offset,
+                      sizeof(tDot11fIEsec_chan_offset));
+    }
+    if (pBeacon->ext_chan_switch_ann.present)
+    {
+        pBeaconStruct->ecsa_present = 1;
+        vos_mem_copy(&pBeaconStruct->ext_chan_switch_ann,
+                     &pBeacon->ext_chan_switch_ann,
+                     sizeof(tDot11fIEext_chan_switch_ann));
     }
 
     if( pBeacon->TPCReport.present)
@@ -5534,17 +5577,17 @@ sap_auth_offload_construct_rsn_opaque( tDot11fIERSN *pdot11f_rsn,
             }
         }
 
-        if (pdot11f_rsn->akm_suite_count)
+        if (pdot11f_rsn->akm_suite_cnt)
         {
-            element_len = sizeof(pdot11f_rsn->akm_suite_count);
-            vos_mem_copy(ptr, &pdot11f_rsn->akm_suite_count, element_len);
+            element_len = sizeof(pdot11f_rsn->akm_suite_cnt);
+            vos_mem_copy(ptr, &pdot11f_rsn->akm_suite_cnt, element_len);
             ptr += element_len;
             data_len += element_len;
-            for (count = 0; count < pdot11f_rsn->akm_suite_count; count++)
+            for (count = 0; count < pdot11f_rsn->akm_suite_cnt; count++)
             {
                 element_len = DOT11F_RSN_OUI_SIZE;
                 vos_mem_copy(ptr,
-                        &pdot11f_rsn->akm_suites[count][0],
+                        &pdot11f_rsn->akm_suite[count][0],
                         element_len);
                 ptr += element_len;
                 data_len += element_len;
@@ -5561,11 +5604,17 @@ sap_auth_offload_construct_rsn_opaque( tDot11fIERSN *pdot11f_rsn,
 }
 
 void
-sap_auth_offload_update_rsn_ie( tpAniSirGlobal pmac,
-        tDot11fIERSNOpaque *pdot11f)
+sap_auth_offload_update_rsn_ie(tpAniSirGlobal pmac,
+			tDot11fIERSNOpaque *pdot11f)
 {
     tDot11fIERSN *pdot11f_rsn;
     pdot11f_rsn = vos_mem_malloc(sizeof(tDot11fIERSN));
+    if (!pdot11f_rsn) {
+           dot11fLog(pmac, LOGE,
+           FL("Memory allocation failes for RSN IE"));
+           return;
+    }
+
     vos_mem_set(pdot11f_rsn, sizeof(tDot11fIERSN), 0);
     /* Assign RSN IE for Software AP Authentication offload security */
     if (pmac->sap_auth_offload && pmac->sap_auth_offload_sec_type)
@@ -5585,8 +5634,8 @@ sap_auth_offload_update_rsn_ie( tpAniSirGlobal pmac,
                 vos_mem_copy(&(pdot11f_rsn->pwise_cipher_suites[0][0]),
                         &sirRSNOui[DOT11F_RSN_CSE_CCMP][0],
                         DOT11F_RSN_OUI_SIZE);
-                pdot11f_rsn->akm_suite_count = 1;
-                vos_mem_copy(&(pdot11f_rsn->akm_suites[0][0]),
+                pdot11f_rsn->akm_suite_cnt = 1;
+                vos_mem_copy(&(pdot11f_rsn->akm_suite[0][0]),
                         &sirRSNOui[DOT11F_RSN_CSE_TKIP][0],
                         DOT11F_RSN_OUI_SIZE);
                 pdot11f_rsn->pmkid_count = 0;
@@ -5600,6 +5649,7 @@ sap_auth_offload_update_rsn_ie( tpAniSirGlobal pmac,
                 break;
         }
     }
+    vos_mem_free(pdot11f_rsn);
 }
 #endif /* SAP_AUTH_OFFLOAD */
 

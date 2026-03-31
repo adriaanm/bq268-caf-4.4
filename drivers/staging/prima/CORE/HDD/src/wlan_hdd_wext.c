@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2018 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2019 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -426,9 +426,6 @@ int hdd_validate_mcc_config(hdd_adapter_t *pAdapter, v_UINT_t staId,
 #ifdef WLAN_FEATURE_PACKET_FILTERING
 int wlan_hdd_set_filter(hdd_adapter_t *pAdapter, tpPacketFilterCfg pRequest);
 #endif
-static int get_fwr_memdump(struct net_device *,
-                            struct iw_request_info *,
-                            union iwreq_data *, char *);
 /**---------------------------------------------------------------------------
 
   \brief mem_alloc_copy_from_user_helper -
@@ -839,7 +836,7 @@ int hdd_wlan_get_freq(v_U32_t channel, v_U32_t *pfreq)
             if (channel == freq_chan_map[i].chan)
             {
                 *pfreq = freq_chan_map[i].freq;
-                return 1;
+                return 0;
             }
         }
     }
@@ -1841,7 +1838,7 @@ static int __iw_get_freq(struct net_device *dev,
        else
        {
            status = hdd_wlan_get_freq(channel, &freq);
-           if( TRUE == status )
+           if( 0 == status )
            {
                /* Set Exponent parameter as 6 (MHZ) in struct iw_freq
                 * iwlist & iwconfig command shows frequency into proper
@@ -5339,6 +5336,172 @@ static int hdd_set_dynamic_aggregation(int value, hdd_adapter_t *adapter)
      return ret;
 }
 
+static int
+wlan_hdd_sta_mon_op(hdd_context_t *hdd_ctx, uint32_t set_value,
+		    hdd_adapter_t *mon_adapter, hdd_mon_ctx_t *mon_ctx)
+{
+	hdd_station_ctx_t *sta_ctx;
+	VOS_STATUS disable_bmps_status;
+	hdd_adapter_t *sta_adapter;
+	v_CONTEXT_t vos_ctx = (WLAN_HDD_GET_CTX(mon_adapter))->pvosContext;
+
+	if (!test_bit(DEVICE_IFACE_OPENED, &mon_adapter->event_flags)) {
+		hddLog(LOGE, FL("Monitor Interface is not OPENED"));
+		return -EINVAL;
+	}
+
+	if (set_value == MON_MODE_STOP) {
+		if (wlan_hdd_check_monitor_state(hdd_ctx))
+			return 0;
+		return -EINVAL;
+	}
+
+	sta_adapter = hdd_get_adapter(hdd_ctx, WLAN_HDD_INFRA_STATION);
+	if (!sta_adapter) {
+		hddLog(LOGE, FL("No Station adapter"));
+		return -EINVAL;
+	}
+
+	sta_ctx = WLAN_HDD_GET_STATION_CTX_PTR(sta_adapter);
+	if (!sta_ctx || !hdd_connIsConnected(sta_ctx)) {
+		hddLog(LOGE, FL("STA is not connected"));
+		return -EINVAL;
+	}
+
+	if (hdd_isConnectionInProgress(hdd_ctx, NULL, NULL)) {
+		hddLog(LOGE, FL("Roaming or set-key is in progress"));
+		return -EBUSY;
+	}
+
+	hdd_disable_roaming(hdd_ctx);
+
+	hddLog(LOG1, FL("Disable BMPS"));
+	disable_bmps_status = hdd_disable_bmps_imps(hdd_ctx,
+						    WLAN_HDD_INFRA_STATION);
+	if (disable_bmps_status != VOS_STATUS_SUCCESS) {
+		hddLog(LOGE, FL("Cannot start monitor mode"));
+		hdd_restore_roaming(hdd_ctx);
+		return -EINVAL;
+	}
+
+	mon_ctx->ChannelNo = sta_ctx->conn_info.operationChannel;
+
+	/*
+	 * In STA + Mon mode, firmware should not consider ChannelBW
+	 */
+	mon_ctx->ChannelBW = 0;
+	mon_ctx->crcCheckEnabled = 0;
+	wlan_hdd_mon_set_typesubtype(mon_ctx, 100);
+	mon_ctx->is80211to803ConReq = 0;
+	WLANTL_SetIsConversionReq(vos_ctx, 0);
+	mon_adapter->dev->type = ARPHRD_IEEE80211_RADIOTAP;
+
+	mon_ctx->state = MON_MODE_START;
+	return 0;
+}
+
+/* set param sub-ioctls */
+static int __iw_mon_setint_getnone(struct net_device *dev,
+				   struct iw_request_info *info,
+				   union iwreq_data *wrqu, char *extra)
+{
+	hdd_adapter_t *adapter;
+	hdd_context_t *hdd_ctx;
+	hdd_mon_ctx_t *mon_ctx;
+	int *value = (int *)extra;
+	int sub_cmd = value[0];
+	int set_value = value[1];
+	int ret = 0; /* success */
+	tVOS_CONCURRENCY_MODE concurrency_mode;
+
+	ENTER();
+	adapter = WLAN_HDD_GET_PRIV_PTR(dev);
+	if (!adapter || adapter->device_mode != WLAN_HDD_MONITOR)
+		return -EINVAL;
+
+	hdd_ctx = WLAN_HDD_GET_CTX(adapter);
+	ret = wlan_hdd_validate_context(hdd_ctx);
+	if (ret)
+		return ret;
+
+	concurrency_mode = hdd_ctx->concurrency_mode;
+	if (concurrency_mode != VOS_STA_MON) {
+		hddLog(LOGE, "invalid concurrency mode %d", concurrency_mode);
+		return -EINVAL;
+	}
+
+	switch(sub_cmd) {
+
+	case WE_SET_MONITOR_STATE:
+		{
+			void *cookie;
+			struct hdd_request *request;
+			static const struct hdd_request_params params = {
+				.priv_size = 0,
+				.timeout_ms = MON_MODE_MSG_TIMEOUT,
+			};
+
+			mon_ctx = WLAN_HDD_GET_MONITOR_CTX_PTR(adapter);
+			if(!mon_ctx) {
+				hddLog(LOGE, "Monitor Context NULL");
+				ret = -EIO;
+				break;
+			}
+
+			if (mon_ctx->state == set_value) {
+				hddLog(LOGE, FL("already in same mode curr_mode:%d req_mode: %d"),
+				       mon_ctx->state, set_value);
+				break;
+			}
+
+			ret = wlan_hdd_sta_mon_op(hdd_ctx, set_value,
+						  adapter,mon_ctx);
+			if (ret)
+				break;
+
+			mon_ctx->state = set_value;
+			request = hdd_request_alloc(&params);
+			if (!request) {
+				hddLog(VOS_TRACE_LEVEL_ERROR, FL("Request allocation failure"));
+				ret = -ENOMEM;
+				break;
+			}
+			cookie = hdd_request_cookie(request);
+			if (wlan_hdd_mon_postMsg(cookie, mon_ctx,
+						 hdd_mon_post_msg_cb)
+				!= VOS_STATUS_SUCCESS) {
+				hddLog(LOGE, FL("failed to post MON MODE REQ"));
+				mon_ctx->state =
+					(mon_ctx->state==MON_MODE_START) ?
+					MON_MODE_STOP : MON_MODE_START;
+				ret = -EIO;
+			} else {
+				ret = hdd_request_wait_for_response(request);
+				if (ret){
+					hddLog(LOGE, FL("failed to wait on monitor mode completion %d"),
+							ret);
+				} else if (mon_ctx->state == MON_MODE_STOP) {
+					hddLog(LOG1, FL("Enable BMPS"));
+					hdd_enable_bmps_imps(hdd_ctx);
+					hdd_restore_roaming(hdd_ctx);
+				}
+			}
+			hdd_request_put(request);
+		}
+		break;
+
+	default:
+		{
+			hddLog(LOGE, "Invalid IOCTL setvalue command %d value %d",
+			       sub_cmd, set_value);
+		}
+		break;
+	}
+
+	EXIT();
+	return ret;
+}
+
 /* set param sub-ioctls */
 static int __iw_setint_getnone(struct net_device *dev,
                                struct iw_request_info *info,
@@ -5443,6 +5606,12 @@ static int __iw_setint_getnone(struct net_device *dev,
         }
         case WE_SET_POWER:
         {
+           if (wlan_hdd_check_monitor_state(pHddCtx)) {
+               hddLog(LOGE, FL("setPower not allowed in STA + MON"));
+               ret = -EOPNOTSUPP;
+               break;
+           }
+
            switch (set_value)
            {
               case  0: //Full Power
@@ -6080,6 +6249,21 @@ static int iw_setint_getnone(struct net_device *dev,
 
     return 0;
 }
+
+static
+int iw_mon_setint_getnone(struct net_device *dev,
+			  struct iw_request_info *info,
+			  union iwreq_data *wrqu, char *extra)
+{
+	int ret;
+
+	vos_ssr_protect(__func__);
+	ret = __iw_mon_setint_getnone(dev, info, wrqu, extra);
+	vos_ssr_unprotect(__func__);
+
+	return 0;
+}
+
 /* set param sub-ioctls */
 static int __iw_setchar_getnone(struct net_device *dev,
                                 struct iw_request_info *info,
@@ -6155,10 +6339,22 @@ static int __iw_setchar_getnone(struct net_device *dev,
     switch(sub_cmd)
     {
        case WE_WOWL_ADD_PTRN:
+           if (wlan_hdd_check_monitor_state(pHddCtx)) {
+               hddLog(LOGE, FL("wowlAddPtrn not allowed in STA + MON"));
+               ret = -EOPNOTSUPP;
+               break;
+           }
+
           VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO, "ADD_PTRN");
           hdd_add_wowl_ptrn(pAdapter, pBuffer);
           break;
        case WE_WOWL_DEL_PTRN:
+           if (wlan_hdd_check_monitor_state(pHddCtx)) {
+               hddLog(LOGE, FL("wowlDelPtrn not allowed in STA + MON"));
+               ret = -EOPNOTSUPP;
+               break;
+           }
+
           VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO, "DEL_PTRN");
           hdd_del_wowl_ptrn(pAdapter, pBuffer);
           break;
@@ -6623,6 +6819,11 @@ static int __iw_get_char_setnone(struct net_device *dev,
                    "%s: pAdapter is NULL!", __func__);
          return -EINVAL;
     }
+
+    if (WLAN_HDD_MONITOR == pAdapter->device_mode ||
+        WLAN_HDD_FTM == pAdapter->device_mode)
+        return ret;
+
     pHddCtx = WLAN_HDD_GET_CTX(pAdapter);
     ret = wlan_hdd_validate_context(pHddCtx);
     if (0 != ret)
@@ -7226,6 +7427,12 @@ static int __iw_setnone_getnone(struct net_device *dev,
                        "adapter and try again\n");
               break;
           }
+
+          if (wlan_hdd_check_monitor_state(pHddCtx)) {
+              hddLog(LOGE, FL("initAP not allowed in STA + MON"));
+              ret = -EOPNOTSUPP;
+              break;
+          }
           pr_info("Init AP trigger\n");
           hdd_open_adapter( WLAN_HDD_GET_CTX(pAdapter), WLAN_HDD_SOFTAP, "softap.%d",
                  wlan_hdd_get_intf_addr( WLAN_HDD_GET_CTX(pAdapter) ),TRUE);
@@ -7385,13 +7592,6 @@ static int __iw_setnone_getnone(struct net_device *dev,
                      WLAN_LOG_INDICATOR_IOCTL,
                      WLAN_LOG_REASON_IOCTL,
                      TRUE, TRUE);
-            break;
-        }
-        case WE_GET_FW_MEMDUMP:
-        {
-            VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO,
-                     "FW_MEM_DUMP requested ");
-            get_fwr_memdump(dev,info,wrqu,extra);
             break;
         }
         default:
@@ -10156,9 +10356,15 @@ int hdd_setBand(struct net_device *dev, u8 ui_band)
               * first and then the actual country.
               */
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,9,0))
-             regulatory_hint_user("00", NL80211_USER_REG_HINT_USER);
+             if(curr_country[0] == '0' && curr_country[1] == '0')
+                     regulatory_hint_user("IN", NL80211_USER_REG_HINT_USER);
+             else
+                     regulatory_hint_user("00", NL80211_USER_REG_HINT_USER);
 #else
-             regulatory_hint_user("00");
+             if(curr_country[0] == '0' && curr_country[1] == '0')
+                     regulatory_hint_user("IN");
+             else
+                     regulatory_hint_user("00");
 #endif
              wait_result = wait_for_completion_interruptible_timeout(
                                &pHddCtx->linux_reg_req,
@@ -10319,32 +10525,6 @@ static int iw_set_band_config(struct net_device *dev,
     vos_ssr_unprotect(__func__);
 
     return ret;
-}
-
-static int get_fwr_memdump(struct net_device *dev,
-                            struct iw_request_info *info,
-                            union iwreq_data *wrqu, char *extra)
-{
-    hdd_adapter_t *pAdapter = WLAN_HDD_GET_PRIV_PTR(dev);
-    hdd_context_t *pHddCtx = WLAN_HDD_GET_CTX(pAdapter);
-    int ret;
-    ENTER();
-   // HddCtx sanity
-   ret = wlan_hdd_validate_context(pHddCtx);
-   if (0 != ret)
-   {
-      return ret;
-   }
-   if( !pHddCtx->cfg_ini->enableFwrMemDump ||
-      (FALSE == sme_IsFeatureSupportedByFW(MEMORY_DUMP_SUPPORTED)))
-   {
-      hddLog(VOS_TRACE_LEVEL_INFO, FL("FW dump Logging not supported"));
-      return -EINVAL;
-   }
-   ret = wlan_hdd_fw_mem_dump_req(pHddCtx);
-
-   EXIT();
-   return ret;
 }
 
 static int __iw_set_power_params_priv(struct net_device *dev,
@@ -10813,6 +10993,20 @@ static const iw_handler we_private[] = {
    [WLAN_PRIV_CLEAR_MCBC_FILTER         - SIOCIWFIRSTPRIV]   = iw_clear_dynamic_mcbc_filter,
    [WLAN_SET_POWER_PARAMS               - SIOCIWFIRSTPRIV]   = iw_set_power_params_priv,
    [WLAN_GET_LINK_SPEED                 - SIOCIWFIRSTPRIV]   = iw_get_linkspeed_priv,
+};
+
+static const iw_handler we_mon_private[] = {
+	[WLAN_PRIV_SET_INT_GET_NONE - SIOCIWFIRSTPRIV] =
+					iw_mon_setint_getnone,
+};
+
+static const struct iw_priv_args we_mon_private_args[] = {
+	{WE_SET_MONITOR_STATE, IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 1,
+	 0, "monitor"},
+
+	/* handlers for main ioctl */
+	{WLAN_PRIV_SET_INT_GET_NONE, IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 1,
+	 0, "" },
 };
 
 /*Maximum command length can be only 15 */
@@ -11424,6 +11618,17 @@ const struct iw_handler_def we_handler_def = {
    .get_wireless_stats = get_wireless_stats,
 };
 
+const struct iw_handler_def we_mon_handler_def = {
+	.num_standard = 0,
+	.num_private  = sizeof(we_mon_private) / sizeof(we_mon_private[0]),
+	.num_private_args =
+		sizeof(we_mon_private_args) / sizeof(we_mon_private_args[0]),
+	.standard = NULL,
+	.private = (iw_handler *)we_mon_private,
+	.private_args = we_mon_private_args,
+	.get_wireless_stats = NULL,
+};
+
 int hdd_validate_mcc_config(hdd_adapter_t *pAdapter, v_UINT_t staId, v_UINT_t arg1, v_UINT_t arg2, v_UINT_t arg3)
 {
     v_U32_t  cmd = 288; //Command to RIVA
@@ -11650,6 +11855,13 @@ int hdd_register_wext(struct net_device *dev)
     VOS_STATUS status;
 
    ENTER();
+
+   if (pAdapter->device_mode == WLAN_HDD_MONITOR &&
+       hdd_get_conparam() != VOS_MONITOR_MODE) {
+       // Register as a wireless device
+       dev->wireless_handlers = (struct iw_handler_def *)&we_mon_handler_def;
+       return 0;
+   }
 
     // Zero the memory.  This zeros the profile structure.
    memset(pwextBuf, 0,sizeof(hdd_wext_state_t));

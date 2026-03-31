@@ -1095,6 +1095,13 @@ limRejectAssociation(tpAniSirGlobal pMac, tSirMacAddr peerAddr, tANI_U8 subType,
             vos_mem_free(psessionEntry->parsedAssocReq[pStaDs->assocId]);
             psessionEntry->parsedAssocReq[pStaDs->assocId] = NULL;
         }
+
+        if (pStaDs->mlmStaContext.mlmState == eLIM_MLM_WT_ADD_STA_RSP_STATE) {
+            /* Delete hash entry on add sta failure */
+            limReleasePeerIdx(pMac, pStaDs->assocId, psessionEntry);
+            limDeleteDphHashEntry(pMac, pStaDs->staAddr,
+                                  pStaDs->assocId,psessionEntry);
+        }
     }
     else
     {
@@ -1738,11 +1745,11 @@ limPopulateOwnRateSet(tpAniSirGlobal pMac,
 {
     tSirMacRateSet          tempRateSet;
     tSirMacRateSet          tempRateSet2;
-    tANI_U32                i,j,val,min,isArate;
+    tANI_U32                i,j,val,min;
     tANI_U32 phyMode = 0;
     tANI_U32 selfStaDot11Mode=0;
-
-    isArate = 0;
+    tANI_U8 aRateIndex = 0;
+    tANI_U8 bRateIndex = 0;
 
     wlan_cfgGetInt(pMac, WNI_CFG_DOT11_MODE, &selfStaDot11Mode);
     limGetPhyMode(pMac, &phyMode, psessionEntry);
@@ -1792,53 +1799,53 @@ limPopulateOwnRateSet(tpAniSirGlobal pMac,
      * Sort rates in tempRateSet (they are likely to be already sorted)
      * put the result in pSupportedRates
      */
-    {
-        tANI_U8 aRateIndex = 0;
-        tANI_U8 bRateIndex = 0;
-
-        vos_mem_set((tANI_U8 *) pRates, sizeof(tSirSupportedRates), 0);
-        for(i = 0;i < tempRateSet.numRates; i++)
-        {
-            min = 0;
-            val = 0xff;
-            isArate = 0;
-            for(j = 0; (j < tempRateSet.numRates) && (j < SIR_MAC_RATESET_EID_MAX); j++)
-            {
-                if ((tANI_U32) (tempRateSet.rate[j] & 0x7f) < val)
-                {
-                     val = tempRateSet.rate[j] & 0x7f;
-                     min = j;
-                }
+    vos_mem_set((tANI_U8 *) pRates, sizeof(tSirSupportedRates), 0);
+    for (i = 0; i < tempRateSet.numRates; i++) {
+        min = 0;
+        val = 0xff;
+        for (j = 0; (j < tempRateSet.numRates) &&
+             (j < SIR_MAC_RATESET_EID_MAX); j++) {
+            if ((tANI_U32)(tempRateSet.rate[j] & 0x7f) < val) {
+                val = tempRateSet.rate[j] & 0x7f;
+                min = j;
             }
-
-            if (sirIsArate(tempRateSet.rate[min] & 0x7f))
-                isArate = 1;
-
-    /*
-    * HAL needs to know whether the rate is basic rate or not, as it needs to 
-    * update the response rate table accordingly. e.g. if one of the 11a rates is
-    * basic rate, then that rate can be used for sending control frames.
-    * HAL updates the response rate table whenever basic rate set is changed.
-    */
-            if (basicOnly)
-            {
-                if (tempRateSet.rate[min] & 0x80)
-                {
-                    if (isArate)
-                        pRates->llaRates[aRateIndex++] = tempRateSet.rate[min];
-                    else
-                        pRates->llbRates[bRateIndex++] = tempRateSet.rate[min];
-                }
-            }
-            else
-            {
-                if (isArate)
-                    pRates->llaRates[aRateIndex++] = tempRateSet.rate[min];
-                else
-                    pRates->llbRates[bRateIndex++] = tempRateSet.rate[min];
-            }
-            tempRateSet.rate[min] = 0xff;
         }
+        /*
+         * HAL needs to know whether the rate is basic rate or not,
+         * as it needs to update the response rate table accordingly.
+         * e.g. if one of the 11a rates is basic rate, then that rate
+         * can be used for sending control frames. HAL updates the
+         * response rate table whenever basic rate set is changed.
+         */
+        if (basicOnly && !(tempRateSet.rate[min] & 0x80)) {
+            limLog(pMac, LOG2, FL("Invalid basic rate"));
+        } else if (sirIsArate(tempRateSet.rate[min] & 0x7f)) {
+            if (aRateIndex >= SIR_NUM_11A_RATES) {
+                limLog(pMac, LOG2, FL("OOB, aRateIndex: %d"), aRateIndex);
+            } else if (aRateIndex >= 1 && (tempRateSet.rate[min] ==
+                   pRates->llaRates[aRateIndex - 1])) {
+                limLog(pMac, LOG2, FL("Duplicate 11a rate: %d"),
+                       tempRateSet.rate[min]);
+            } else {
+                pRates->llaRates[aRateIndex++] =
+                        tempRateSet.rate[min];
+            }
+        } else if (sirIsBrate(tempRateSet.rate[min] & 0x7f)) {
+            if (bRateIndex >= SIR_NUM_11B_RATES) {
+                limLog(pMac, LOG2, FL("OOB, bRateIndex: %d"), bRateIndex);
+            } else if (bRateIndex >= 1 && (tempRateSet.rate[min] ==
+                   pRates->llbRates[bRateIndex - 1])) {
+                limLog(pMac, LOG2, FL("Duplicate 11b rate: %d"),
+                       tempRateSet.rate[min]);
+            } else {
+                pRates->llbRates[bRateIndex++] =
+                        tempRateSet.rate[min];
+            }
+        } else {
+            limLog(pMac, LOG2, FL("%d is neither 11a nor 11b rate"),
+                   tempRateSet.rate[min]);
+        }
+        tempRateSet.rate[min] = 0xff;
 
     }
 
@@ -1903,8 +1910,9 @@ limPopulatePeerRateSet(tpAniSirGlobal pMac,
 {
     tSirMacRateSet          tempRateSet;
     tSirMacRateSet          tempRateSet2;
-    tANI_U32                     i,j,val,min,isArate;
-    isArate = 0;
+    tANI_U32                     i,j,val,min;
+    tANI_U8 aRateIndex = 0;
+    tANI_U8 bRateIndex = 0;
 
     /* copy operational rate set from psessionEntry */
     if ( psessionEntry->rateSet.numRates <= SIR_MAC_RATESET_EID_MAX )
@@ -1945,7 +1953,6 @@ limPopulatePeerRateSet(tpAniSirGlobal pMac,
         goto error;
     }
 
-
     //copy all rates in tempRateSet, there are 12 rates max
     for (i = 0;i < tempRateSet2.numRates; i++)
       tempRateSet.rate[i + tempRateSet.numRates] = tempRateSet2.rate[i];
@@ -1954,52 +1961,54 @@ limPopulatePeerRateSet(tpAniSirGlobal pMac,
      * Sort rates in tempRateSet (they are likely to be already sorted)
      * put the result in pSupportedRates
      */
-    {
-        tANI_U8 aRateIndex = 0;
-        tANI_U8 bRateIndex = 0;
-        vos_mem_set((tANI_U8 *) pRates, sizeof(tSirSupportedRates), 0);
-        for(i = 0;i < tempRateSet.numRates; i++)
-        {
-            min = 0;
-            val = 0xff;
-            isArate = 0;
-            for(j = 0; (j < tempRateSet.numRates) && (j < SIR_MAC_RATESET_EID_MAX); j++)
-            {
-                if ((tANI_U32) (tempRateSet.rate[j] & 0x7f) < val)
-                {
-                     val = tempRateSet.rate[j] & 0x7f;
-                     min = j;
-                }
+    vos_mem_set((tANI_U8 *) pRates, sizeof(tSirSupportedRates), 0);
+    for (i = 0; i < tempRateSet.numRates; i++) {
+        min = 0;
+        val = 0xff;
+        for (j = 0; (j < tempRateSet.numRates) &&
+             (j < SIR_MAC_RATESET_EID_MAX); j++) {
+            if ((tANI_U32)(tempRateSet.rate[j] & 0x7f) < val) {
+                val = tempRateSet.rate[j] & 0x7f;
+                min = j;
             }
-            if (sirIsArate(tempRateSet.rate[min] & 0x7f))
-                isArate = 1;
-    /*
-    * HAL needs to know whether the rate is basic rate or not, as it needs to
-    * update the response rate table accordingly. e.g. if one of the 11a rates is
-    * basic rate, then that rate can be used for sending control frames.
-    * HAL updates the response rate table whenever basic rate set is changed.
-    */
-            if (basicOnly)
-            {
-                if (tempRateSet.rate[min] & 0x80)
-                {
-                    if (isArate)
-                        pRates->llaRates[aRateIndex++] = tempRateSet.rate[min];
-                    else
-                        pRates->llbRates[bRateIndex++] = tempRateSet.rate[min];
-                }
-            }
-            else
-            {
-                if (isArate)
-                    pRates->llaRates[aRateIndex++] = tempRateSet.rate[min];
-                else
-                    pRates->llbRates[bRateIndex++] = tempRateSet.rate[min];
-            }
-            tempRateSet.rate[min] = 0xff;
         }
+        /*
+         * HAL needs to know whether the rate is basic rate or not,
+         * as it needs to update the response rate table accordingly.
+         * e.g. if one of the 11a rates is basic rate, then that rate
+         * can be used for sending control frames. HAL updates the
+         * response rate table whenever basic rate set is changed.
+         */
+        if (basicOnly && !(tempRateSet.rate[min] & 0x80)) {
+            limLog(pMac, LOG2, FL("Invalid basic rate"));
+        } else if (sirIsArate(tempRateSet.rate[min] & 0x7f)) {
+            if (aRateIndex >= SIR_NUM_11A_RATES) {
+                limLog(pMac, LOG2, FL("OOB, aRateIndex: %d"), aRateIndex);
+            } else if (aRateIndex >= 1 && (tempRateSet.rate[min] ==
+                   pRates->llaRates[aRateIndex - 1])) {
+                limLog(pMac, LOG2, FL("Duplicate 11a rate: %d"),
+                       tempRateSet.rate[min]);
+            } else {
+                pRates->llaRates[aRateIndex++] =
+                        tempRateSet.rate[min];
+            }
+        } else if (sirIsBrate(tempRateSet.rate[min] & 0x7f)) {
+            if (bRateIndex >= SIR_NUM_11B_RATES) {
+                limLog(pMac, LOG2, FL("OOB, bRateIndex: %d"), bRateIndex);
+            } else if (bRateIndex >= 1 && (tempRateSet.rate[min] ==
+                   pRates->llbRates[bRateIndex - 1])) {
+                limLog(pMac, LOG2, FL("Duplicate 11b rate: %d"),
+                       tempRateSet.rate[min]);
+            } else {
+                pRates->llbRates[bRateIndex++] =
+                        tempRateSet.rate[min];
+            }
+        } else {
+            limLog(pMac, LOG2, FL("%d is neither 11a nor 11b rate"),
+                   tempRateSet.rate[min]);
+        }
+        tempRateSet.rate[min] = 0xff;
     }
-
 
     if (IS_DOT11_MODE_HT(psessionEntry->dot11mode))
     {
@@ -2698,6 +2707,8 @@ limDelSta(
     tpDeleteStaParams pDelStaParams = NULL;
     tSirMsgQ msgQ;
     tSirRetStatus     retCode = eSIR_SUCCESS;
+    tANI_U8 channelNum = 0;
+    tANI_U32 cfgValue = 0;
 
     pDelStaParams = vos_mem_malloc(sizeof( tDeleteStaParams ));
     if (NULL == pDelStaParams)
@@ -2707,6 +2718,18 @@ limDelSta(
     }
 
     vos_mem_set((tANI_U8 *) pDelStaParams, sizeof(tDeleteStaParams), 0);
+
+    wlan_cfgGetInt(pMac, WNI_CFG_ACTIVE_PASSIVE_CON, &cfgValue);
+
+    channelNum = limGetCurrentOperatingChannel(pMac);
+    limLog(pMac, LOG1, FL("Current Operating channel is %d"), channelNum);
+    if (!cfgValue && (eLIM_STA_ROLE == GET_LIM_SYSTEM_ROLE(psessionEntry)) &&
+         limIsconnectedOnDFSChannel(channelNum))
+    {
+        limCovertChannelScanType(pMac, channelNum, false);
+        pMac->lim.dfschannelList.timeStamp[channelNum] = 0;
+    }
+
 
   //
   // DPH contains the STA index only for "peer" STA entries.
@@ -2744,23 +2767,39 @@ limDelSta(
         pDelStaParams->respReqd = 0;
     else
     {
-        //when limDelSta is called from processSmeAssocCnf then mlmState is already set properly.
-        if(eLIM_MLM_WT_ASSOC_DEL_STA_RSP_STATE != GET_LIM_STA_CONTEXT_MLM_STATE(pStaDs))
-        {
-            MTRACE(macTrace(pMac, TRACE_CODE_MLM_STATE, psessionEntry->peSessionId, eLIM_MLM_WT_DEL_STA_RSP_STATE));
-            SET_LIM_STA_CONTEXT_MLM_STATE(pStaDs, eLIM_MLM_WT_DEL_STA_RSP_STATE);
-        }
-        if ( (eLIM_STA_ROLE == GET_LIM_SYSTEM_ROLE(psessionEntry)) || 
-             (eLIM_BT_AMP_STA_ROLE == GET_LIM_SYSTEM_ROLE(psessionEntry)) )
-        {
-            MTRACE(macTrace(pMac, TRACE_CODE_MLM_STATE, psessionEntry->peSessionId, eLIM_MLM_WT_DEL_STA_RSP_STATE));
+        if (pStaDs->staType != STA_ENTRY_TDLS_PEER) {
+              /**
+               * when limDelSta is called from processSmeAssocCnf
+               * then mlmState is already set properly.
+               */
+              if(eLIM_MLM_WT_ASSOC_DEL_STA_RSP_STATE !=
+                 GET_LIM_STA_CONTEXT_MLM_STATE(pStaDs)) {
+                    MTRACE(macTrace
+                           (pMac, TRACE_CODE_MLM_STATE,
+                           psessionEntry->peSessionId,
+                           eLIM_MLM_WT_DEL_STA_RSP_STATE));
+                    SET_LIM_STA_CONTEXT_MLM_STATE(pStaDs,
+                           eLIM_MLM_WT_DEL_STA_RSP_STATE);
+              }
+             if ((eLIM_STA_ROLE ==
+                  GET_LIM_SYSTEM_ROLE(psessionEntry)) ||
+                 (eLIM_BT_AMP_STA_ROLE ==
+                  GET_LIM_SYSTEM_ROLE(psessionEntry))) {
+                       MTRACE(macTrace(pMac, TRACE_CODE_MLM_STATE,
+                                       psessionEntry->peSessionId,
+                                       eLIM_MLM_WT_DEL_STA_RSP_STATE));
 
-            psessionEntry->limMlmState = eLIM_MLM_WT_DEL_STA_RSP_STATE; 
-    
+                       psessionEntry->limMlmState =
+                               eLIM_MLM_WT_DEL_STA_RSP_STATE;
+             }
+
         }
-        pDelStaParams->respReqd = 1;
-        //we need to defer the message until we get the response back from HAL.
+        /**
+         * we need to defer the message until we get the
+         * response back from HAL.
+         */
         SET_LIM_PROCESS_DEFD_MESGS(pMac, false);
+        pDelStaParams->respReqd = 1;
     }
 
     /* Update PE session ID*/
