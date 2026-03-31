@@ -75,7 +75,9 @@ just bootimg
 #    c. Wait ~150s, then check
 #       ssh bq268 'dmesg | grep -iE "error|oops|panic" | head -20'
 #       ssh bq268 'uname -r; cat /sys/class/power_supply/battery/capacity'
-#    d. Record result in progress table
+#    d. Save dmesg (use short commit hash from the boot image)
+#       ssh bq268 dmesg > dmesg-<commit>.log
+#    e. Record result in progress table
 
 # 7. If device is NOT available:
 #    Continue to the next merge step. Images are saved and can be
