@@ -527,10 +527,8 @@
 
 / {
 	mtp_batterydata: qcom,battery-data {
-		qcom,rpull-up-kohm = <100>;
-		qcom,vref-batt-therm = <1800000>;
-
 		#include "batterydata-qrd-skui-4v2-3000mah.dtsi"
+		/delete-node/ qcom,palladium-batterydata;
 	};
 };
 
