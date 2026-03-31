@@ -66,10 +66,12 @@ just bootimg
 # 5. Update progress table above with the boot image commit hash
 
 # 6. If device is available:
-#    a. Deploy WiFi module (must match running kernel)
+#    a. Deploy WiFi module (must match running kernel version)
+#       VER=$(make -s kernelrelease O=output)  # e.g. 4.4.50-bq268
 #       /opt/toolchains/.../arm-linux-gnueabihf-strip --strip-unneeded \
 #         -o /tmp/wlan.ko output/drivers/staging/prima/wlan.ko
-#       scp /tmp/wlan.ko root@bq268:/lib/modules/wlan.ko
+#       ssh bq268 "mkdir -p /lib/modules/$VER"
+#       scp /tmp/wlan.ko root@bq268:/lib/modules/$VER/wlan.ko
 #    b. Reboot and boot new image
 #       just dev-reboot && just boot
 #    c. Wait ~150s, then check
