@@ -26,6 +26,42 @@ Our CAF base modifies ~635 core kernel files that upstream stable also touches (
 | 4.4.248 | 2,286 | ~12,000 |
 | 4.4.302 (EOL) | 2,442 | ~14,000 |
 
+## Workflow
+
+Each step follows the same cycle:
+
+```sh
+# 1. Find the stable tag commit in our history
+git log --oneline --all --grep='Linux 4.4.50' | grep -v rt | head -1
+# e.g.: abc1234 Linux 4.4.50
+
+# 2. Merge it
+git merge abc1234 -m "Merge Linux 4.4.50 stable"
+# Fix any conflicts, then: git add -u && git commit
+
+# 3. Update SUBLEVEL in Makefile (merge may not update it if CAF diverged)
+# Verify: head -4 Makefile  — SUBLEVEL should match the target
+
+# 4. Build
+just bootimg
+
+# 5. Deploy WiFi module to device (must match running kernel)
+scp $(arm-linux-gnueabihf-strip --strip-unneeded -o /tmp/wlan.ko output/drivers/staging/prima/wlan.ko && echo /tmp/wlan.ko) root@bq268:/lib/modules/wlan.ko
+
+# 6. Reboot device into fastboot and boot
+just dev-reboot
+just boot
+
+# 7. Wait for serial/SSH (~150s), check dmesg
+ssh bq268 'dmesg | grep -i error | head -20'
+ssh bq268 'cat /sys/class/power_supply/battery/capacity'
+
+# 8. If device hangs — keep going. Boot images are saved as
+#    output/boot-<commit>.img and can be fastboot-booted retroactively.
+```
+
+If `just dev-reboot` can't reach the device (hang/crash), hold the power button to reboot, then hold vol-down during boot to enter fastboot manually. Boot the last known-good image: `fastboot boot output/boot-<good-commit>.img`.
+
 ## Plan
 
 Merge in chunks of ~25 sublevels. At each step: merge, build, boot-test, fix conflicts.
