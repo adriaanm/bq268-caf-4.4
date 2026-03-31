@@ -23,6 +23,7 @@
 #ifndef __ASM_ASSEMBLER_H
 #define __ASM_ASSEMBLER_H
 
+#include <asm/cputype.h>
 #include <asm/ptrace.h>
 #include <asm/thread_info.h>
 
@@ -47,18 +48,6 @@
 
 	.macro	enable_irq
 	msr	daifclr, #2
-	.endm
-
-/*
- * Save/disable and restore interrupts.
- */
-	.macro	save_and_disable_irqs, olddaif
-	mrs	\olddaif, daif
-	disable_irq
-	.endm
-
-	.macro	restore_irqs, olddaif
-	msr	daif, \olddaif
 	.endm
 
 /*
@@ -106,19 +95,12 @@
 	dmb	\opt
 	.endm
 
-/*
- * Emit an entry into the exception table
- */
-	.macro		_asm_extable, from, to
-	.pushsection	__ex_table, "a"
-	.align		3
-	.long		(\from - .), (\to - .)
-	.popsection
-	.endm
-
 #define USER(l, x...)				\
 9999:	x;					\
-	_asm_extable	9999b, l
+	.section __ex_table,"a";		\
+	.align	3;				\
+	.quad	9999b,l;			\
+	.previous
 
 /*
  * Register aliases.
@@ -212,17 +194,6 @@ lr	.req	x30		// link register
 	str	\src, [\tmp, :lo12:\sym]
 	.endm
 
-	/*
-	 * @sym: The name of the per-cpu variable
-	 * @reg: Result of per_cpu(sym, smp_processor_id())
-	 * @tmp: scratch register
-	 */
-	.macro this_cpu_ptr, sym, reg, tmp
-	adr_l	\reg, \sym
-	mrs	\tmp, tpidr_el1
-	add	\reg, \reg, \tmp
-	.endm
-
 /*
  * Annotate a function as position independent, i.e., safe to be called before
  * the kernel virtual mapping is activated.
@@ -233,17 +204,6 @@ lr	.req	x30		// link register
 	.set	__pi_##x, x;		\
 	.size	__pi_##x, . - x;	\
 	ENDPROC(x)
-
-	/*
-	 * Emit a 64-bit absolute little endian symbol reference in a way that
-	 * ensures that it will be resolved at build time, even when building a
-	 * PIE binary. This requires cooperation from the linker script, which
-	 * must emit the lo32/hi32 halves individually.
-	 */
-	.macro	le64sym, sym
-	.long	\sym\()_lo32
-	.long	\sym\()_hi32
-	.endm
 
 	/*
 	 * mov_q - move an immediate constant into a 64-bit register using
@@ -263,6 +223,45 @@ lr	.req	x30		// link register
 	movk	\reg, :abs_g1_nc:\val
 	.endif
 	movk	\reg, :abs_g0_nc:\val
+	.endm
+
+/*
+ * Check the MIDR_EL1 of the current CPU for a given model and a range of
+ * variant/revision. See asm/cputype.h for the macros used below.
+ *
+ *	model:		MIDR_CPU_PART of CPU
+ *	rv_min:		Minimum of MIDR_CPU_VAR_REV()
+ *	rv_max:		Maximum of MIDR_CPU_VAR_REV()
+ *	res:		Result register.
+ *	tmp1, tmp2, tmp3: Temporary registers
+ *
+ * Corrupts: res, tmp1, tmp2, tmp3
+ * Returns:  0, if the CPU id doesn't match. Non-zero otherwise
+ */
+	.macro	cpu_midr_match model, rv_min, rv_max, res, tmp1, tmp2, tmp3
+	mrs		\res, midr_el1
+	mov_q		\tmp1, (MIDR_REVISION_MASK | MIDR_VARIANT_MASK)
+	mov_q		\tmp2, MIDR_CPU_PART_MASK
+	and		\tmp3, \res, \tmp2	// Extract model
+	and		\tmp1, \res, \tmp1	// rev & variant
+	mov_q		\tmp2, \model
+	cmp		\tmp3, \tmp2
+	cset		\res, eq
+	cbz		\res, .Ldone\@		// Model matches ?
+
+	.if (\rv_min != 0)			// Skip min check if rv_min == 0
+	mov_q		\tmp3, \rv_min
+	cmp		\tmp1, \tmp3
+	cset		\res, ge
+	.endif					// \rv_min != 0
+	/* Skip rv_max check if rv_min == rv_max && rv_min != 0 */
+	.if ((\rv_min != \rv_max) || \rv_min == 0)
+	mov_q		\tmp2, \rv_max
+	cmp		\tmp1, \tmp2
+	cset		\tmp2, le
+	and		\res, \res, \tmp2
+	.endif
+.Ldone\@:
 	.endm
 
 #endif	/* __ASM_ASSEMBLER_H */
