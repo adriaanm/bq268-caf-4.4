@@ -5,7 +5,7 @@
 | Target | Built | Booted | Result |
 |--------|-------|--------|--------|
 | 4.4.21 | `8954c89a355d` | Yes | **Flashed to eMMC** — this is the fallback on normal reboot |
-| 4.4.50 | | | |
+| 4.4.50 | `0046d2e1791e` | Yes | Boots OK, uname confirms 4.4.50-bq268. WiFi module not deployed (no USB ECM on host). |
 | 4.4.75 | | | |
 | 4.4.100 | | | |
 | 4.4.150 | | | |
