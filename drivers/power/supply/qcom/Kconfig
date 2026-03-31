@@ -100,4 +100,21 @@ config QPNP_QNOVO
 	  module. It also allows userspace code to read diagnostics of voltage
 	  and current measured during certain phases of the pulses.
 
+config QPNP_LINEAR_CHARGER
+	tristate "QPNP Linear Charger driver"
+	depends on MFD_SPMI_PMIC
+	depends on THERMAL_QPNP_ADC_TM
+	help
+	  Say Y here to enable the QPNP Linear Charger driver. Supports
+	  the PM8909 linear battery charger with thermal mitigation, JEITA
+	  compliance, and battery presence detection via PMIC SPMI.
+
+config QPNP_VM_BMS
+	tristate "QPNP Voltage-Mode Battery Monitoring System driver"
+	depends on MFD_SPMI_PMIC
+	help
+	  Say Y here to enable the QPNP VM-BMS driver. Provides battery
+	  state-of-charge estimation using voltage-mode coulomb counting
+	  on PM8909 and similar PMICs.
+
 endmenu
