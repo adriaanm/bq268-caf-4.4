@@ -89,8 +89,6 @@ void ext4_free_crypt_info(struct ext4_crypt_info *ci)
 	if (!ci)
 		return;
 
-	if (ci->ci_keyring_key)
-		key_put(ci->ci_keyring_key);
 	crypto_free_ablkcipher(ci->ci_ctfm);
 	kmem_cache_free(ext4_crypt_info_cachep, ci);
 }
@@ -135,20 +133,13 @@ int _ext4_get_encryption_info(struct inode *inode)
 	int mode;
 	int res;
 
+	if (ei->i_crypt_info)
+		return 0;
+
 	if (!ext4_read_workqueue) {
 		res = ext4_init_crypto();
 		if (res)
 			return res;
-	}
-
-retry:
-	crypt_info = ACCESS_ONCE(ei->i_crypt_info);
-	if (crypt_info) {
-		if (!crypt_info->ci_keyring_key ||
-		    key_validate(crypt_info->ci_keyring_key) == 0)
-			return 0;
-		ext4_free_encryption_info(inode, crypt_info);
-		goto retry;
 	}
 
 	res = ext4_xattr_get(inode, EXT4_XATTR_INDEX_ENCRYPTION,
@@ -174,7 +165,6 @@ retry:
 	crypt_info->ci_data_mode = ctx.contents_encryption_mode;
 	crypt_info->ci_filename_mode = ctx.filenames_encryption_mode;
 	crypt_info->ci_ctfm = NULL;
-	crypt_info->ci_keyring_key = NULL;
 	memcpy(crypt_info->ci_master_key, ctx.master_key_descriptor,
 	       sizeof(crypt_info->ci_master_key));
 	if (S_ISDIR(inode->i_mode) || S_ISLNK(inode->i_mode))
@@ -217,7 +207,6 @@ retry:
 		keyring_key = NULL;
 		goto out;
 	}
-	crypt_info->ci_keyring_key = keyring_key;
 	if (keyring_key->type != &key_type_logon) {
 		printk_once(KERN_WARNING
 			    "ext4: key type must be logon\n");
@@ -278,12 +267,12 @@ got_key:
 		goto retry;
 	}
 	return 0;
-
 out:
 	if (res == -ENOKEY)
 		res = 0;
 	memzero_explicit(crypt_info->ci_raw_key,
 		sizeof(crypt_info->ci_raw_key));
+	key_put(keyring_key);
 	ext4_free_crypt_info(crypt_info);
 	return res;
 }
