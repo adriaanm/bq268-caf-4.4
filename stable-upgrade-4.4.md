@@ -7,10 +7,10 @@
 | 4.4.21 | `8954c89a355d` | Yes | **Flashed to eMMC** — this is the fallback on normal reboot |
 | 4.4.50 | `0046d2e1791e` | Yes | Boots OK, uname confirms 4.4.50-bq268. WiFi module not deployed (no USB ECM on host). |
 | 4.4.75 | `e7a933b099c5` | Yes | Boots ok. need to scp wifi module while in 4.4.21 |
-| 4.4.100 | `ec56da4c3670` | | Boots but crashes during openrc, dmesg captured  |
-| 4.4.150 | `27651e70b936` | | Device unreachable, needs manual boot test |
-| 4.4.200 | `f8d7e1a42f97` | | Device unreachable, needs manual boot test |
-| 4.4.302 | `fd33aa4f37cb` | | Needs boot test — final EOL build |
+| 4.4.100 | `75690d14ff3a` | Yes | Fixed: USB gadget composite unbind NULL deref. Boots + ECM works. |
+| 4.4.150 | `27651e70b936` | | Same composite bug present, needs rebuild with fix |
+| 4.4.200 | `f8d7e1a42f97` | | Same composite bug present, needs rebuild with fix |
+| 4.4.302 | `e46256c2192f` | Yes | **All services OK**, WiFi+SSH, battery 21%. Final EOL kernel working. |
 
 ## Goal
 
