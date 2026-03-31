@@ -72,12 +72,36 @@ Focus merge conflict resolution effort on:
 - **networking** (TCP/IP, WiFi cfg80211) — exposed to network
 - **crypto** — WPA, module signatures
 
-## Fixes Already Applied
+## Watchlist: Files That Need Manual Attention
 
-Three issues found during the base alignment that may resurface during stable merges:
+These files caused build failures, boot crashes, or required fixups during our base alignment. Stable merges will likely touch them again.
 
-1. **CMA free must restore kernel mapping** (`arch/arm/mm/dma-mapping.c`) — `__free_from_contiguous` `want_vaddr` must be `true`, otherwise freed CMA pages crash when re-allocated. Upstream stable may re-introduce the `false` value.
+### Boot-critical (crashes if wrong)
 
-2. **USB gadget L1 LPM must be disabled for HS** (`drivers/usb/gadget/composite.c`) — `disable_l1_for_hs` must default to `true` on ChipIdea UDC, otherwise gadget fails to enumerate.
+| File | Issue | Our fix | What to watch for |
+|------|-------|---------|-------------------|
+| `arch/arm/mm/dma-mapping.c` | `__free_from_contiguous` passed `want_vaddr=false` → clears kernel PTE for CMA pages → Oops in `v6_clear_user_highpage` when page re-allocated | Set `want_vaddr=true` | Any change to `__free_from_contiguous` or `__dma_remap` args |
+| `drivers/usb/gadget/composite.c` | `disable_l1_for_hs` default flipped to `false` → USB 2.1 LPM advertised → ChipIdea UDC fails to enumerate → no ttyGS0 | Set `disable_l1_for_hs = true` | Any change to this default or the `bcdUSB = 0x0210` path |
 
-3. **Prima `cfg80211_connect_bss` API** — upstream added `timeout_reason` parameter at some point; prima doesn't use it. Watch for signature changes.
+### Build-breaking (won't compile if wrong)
+
+| File | Issue | Our fix | What to watch for |
+|------|-------|---------|-------------------|
+| `drivers/soc/qcom/Makefile` | `smp2p_loopback.o` moved behind `CONFIG_MSM_SMP2P_TEST` but `smp2p.c` references its symbols unconditionally | Keep `smp2p_loopback.o` with `CONFIG_MSM_SMP2P` | Any Makefile reorganization of SMP2P objects |
+| `drivers/staging/prima/.../wlan_hdd_main.c` | `cfg80211_connect_bss()` gains/loses `timeout_reason` param; `NL80211_TIMEOUT_UNSPECIFIED` may appear/disappear | Drop the extra arg for our base | Any `cfg80211_connect_bss` signature change in `include/net/cfg80211.h` |
+| `drivers/staging/prima/.../wlan_hdd_assoc.c` | Misleading indentation in `hdd_copy_ht_caps` (for-loop scope) and `hdd_copy_vht_caps` (missing braces) triggers `-Werror` | Fixed indentation and added braces | Prima is frozen — only breaks if GCC warnings change |
+| `include/uapi/linux/nl80211.h` | `NL80211_ATTR_TIMEOUT_REASON` / `nl80211_timeout_reason` enum added by some stable versions | If added, prima may need the extra arg back | Grep for `TIMEOUT_REASON` after each merge |
+
+### CAF vs upstream conflicts (known hotspots)
+
+| File | CAF modification | Why it conflicts |
+|------|-----------------|-----------------|
+| `kernel/sched/core.c` | HMP task placement, `core_ctl_check()`, `DEQUEUE_MOVE` | Upstream scheduler fixes touch the same functions |
+| `kernel/sched/rt.c` | `on_rq`/`on_list` fields, `task_may_not_preempt()` | Upstream RT fixes assume different struct layout |
+| `kernel/locking/osq_lock.c` | We cherry-picked the `smp_wmb()` fix | Upstream may add more barriers or restructure |
+| `kernel/locking/rwsem-xadd.c` | Missing `smp_rmb()` in `rwsem_wake()` | Upstream rewrites to `wake_q` API around 4.4.150 |
+| `mm/backing-dev.c` | Embedded `backing_dev_info` struct | Upstream converts to refcounted pointer ~4.4.150 |
+| `mm/zsmalloc.c` | Simple page-field-based implementation | Upstream adds `struct zspage` abstraction ~4.4.100 |
+| `mm/compaction.c` | No `kcompactd` | Upstream adds it ~4.4.100 |
+| `drivers/soc/qcom/qdsp6v2/apr.c` | Older refcount semantics, single `service_nb` | Any stable fix touching APR will see different code |
+| `drivers/power/supply/qcom/qpnp-linear-charger.c` | `usb_psy` lookup made optional (no USB PSY on 4.4) | Not upstream — our local driver, won't conflict with stable |
