@@ -27,6 +27,8 @@
 #include <linux/bitops.h>
 #include <linux/leds.h>
 #include <linux/debugfs.h>
+#include <linux/usb/phy.h>
+#include <linux/usb/msm_hsusb.h>
 
 #define CREATE_MASK(NUM_BITS, POS) \
 	((unsigned char) (((1 << (NUM_BITS)) - 1) << (POS)))
@@ -392,6 +394,9 @@ struct qpnp_lbc_chip {
 	struct qpnp_adc_tm_chip		*adc_tm_dev;
 	struct led_classdev		led_cdev;
 	struct dentry			*debug_root;
+
+	/* BC1.2 charger type detection via USB PHY */
+	struct usb_phy			*usb_phy;
 
 	/* parallel-chg params */
 	struct power_supply		*parallel_psy;
@@ -2472,6 +2477,19 @@ static irqreturn_t qpnp_lbc_usbin_valid_irq_handler(int irq, void *_chip)
 
 			if (chip->supported_feature_flag & VDD_TRIM_SUPPORTED)
 				alarm_try_to_cancel(&chip->vddtrim_alarm);
+
+			/*
+			 * Cancel any pending BC1.2 detection and reset
+			 * the PHY's charger state for next insertion.
+			 */
+			if (chip->usb_phy) {
+				struct msm_otg *motg = container_of(
+					chip->usb_phy, struct msm_otg, phy);
+				cancel_delayed_work(&motg->chg_work);
+				motg->chg_state = USB_CHG_STATE_UNDEFINED;
+				motg->chg_type = USB_INVALID_CHARGER;
+				motg->cur_power = 0;
+			}
 		} else {
 			/*
 			 * Override VBAT_DET comparator to start charging
@@ -2496,6 +2514,19 @@ static irqreturn_t qpnp_lbc_usbin_valid_irq_handler(int irq, void *_chip)
 			 * irrespective of battery SOC above resume_soc.
 			 */
 			qpnp_lbc_charger_enable(chip, SOC, 1);
+
+			/*
+			 * Trigger BC1.2 charger type detection on the
+			 * USB PHY.  The PHY's detection work runs the
+			 * ULPI D+/D- state machine and updates our USB
+			 * PSY current_max when done.
+			 */
+			if (chip->usb_phy) {
+				struct msm_otg *motg = container_of(
+					chip->usb_phy, struct msm_otg, phy);
+				motg->chg_state = USB_CHG_STATE_UNDEFINED;
+				schedule_delayed_work(&motg->chg_work, 0);
+			}
 		}
 
 		if (chip->usb_psy) {
@@ -3141,12 +3172,59 @@ static int lbc_usb_psy_get_property(struct power_supply *psy,
 	return 0;
 }
 
+static int lbc_usb_psy_set_property(struct power_supply *psy,
+		enum power_supply_property psp,
+		const union power_supply_propval *val)
+{
+	struct qpnp_lbc_chip *chip = power_supply_get_drvdata(psy);
+	unsigned long flags;
+	int current_ma;
+
+	switch (psp) {
+	case POWER_SUPPLY_PROP_CURRENT_MAX:
+		current_ma = val->intval / 1000;
+		spin_lock_irqsave(&chip->ibat_change_lock, flags);
+		if (current_ma != chip->prev_max_ma) {
+			if (current_ma <= 2 && !chip->cfg_use_fake_battery
+					&& get_prop_batt_present(chip)) {
+				qpnp_lbc_charger_enable(chip, CURRENT, 0);
+				chip->usb_psy_ma = QPNP_CHG_I_MAX_MIN_90;
+				qpnp_lbc_set_appropriate_current(chip);
+			} else {
+				chip->usb_psy_ma = current_ma;
+				qpnp_lbc_set_appropriate_current(chip);
+				qpnp_lbc_charger_enable(chip, CURRENT, 1);
+			}
+		}
+		spin_unlock_irqrestore(&chip->ibat_change_lock, flags);
+		pr_info("USB PSY current_max set to %d mA\n", current_ma);
+		power_supply_changed(chip->batt_psy);
+		break;
+	default:
+		return -EINVAL;
+	}
+	return 0;
+}
+
+static int lbc_usb_psy_is_writeable(struct power_supply *psy,
+		enum power_supply_property psp)
+{
+	switch (psp) {
+	case POWER_SUPPLY_PROP_CURRENT_MAX:
+		return 1;
+	default:
+		return 0;
+	}
+}
+
 static const struct power_supply_desc lbc_usb_psy_desc = {
 	.name		= "usb",
 	.type		= POWER_SUPPLY_TYPE_USB,
 	.properties	= lbc_usb_psy_props,
 	.num_properties	= ARRAY_SIZE(lbc_usb_psy_props),
 	.get_property	= lbc_usb_psy_get_property,
+	.set_property	= lbc_usb_psy_set_property,
+	.property_is_writeable = lbc_usb_psy_is_writeable,
 };
 
 static const struct power_supply_desc batt_psy_desc = {
@@ -3395,6 +3473,30 @@ static int qpnp_lbc_main_probe(struct platform_device *pdev)
 
 	if (chip->cfg_charging_disabled && !get_prop_batt_present(chip))
 		pr_info("Battery absent and charging disabled !!!\n");
+
+	/*
+	 * Get a reference to the USB PHY for BC1.2 charger type detection.
+	 * The msm_otg driver has the ULPI-based detection state machine;
+	 * we trigger it from our USBIN_VALID IRQ (PMIC VBUS detection is
+	 * reliable, unlike OTGSC BSV with manual-pullup).
+	 */
+	chip->usb_phy = usb_get_phy(USB_PHY_TYPE_USB2);
+	if (IS_ERR(chip->usb_phy)) {
+		pr_warn("No USB PHY found, BC1.2 detection disabled\n");
+		chip->usb_phy = NULL;
+	} else {
+		pr_info("USB PHY acquired for BC1.2 detection\n");
+		/*
+		 * If USB is already present at probe time, trigger
+		 * BC1.2 detection now.
+		 */
+		if (chip->usb_present) {
+			struct msm_otg *motg = container_of(
+				chip->usb_phy, struct msm_otg, phy);
+			motg->chg_state = USB_CHG_STATE_UNDEFINED;
+			schedule_delayed_work(&motg->chg_work, 0);
+		}
+	}
 
 	/* Configure initial alarm for VDD trim */
 	if ((chip->supported_feature_flag & VDD_TRIM_SUPPORTED) &&

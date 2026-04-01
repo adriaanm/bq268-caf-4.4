@@ -19,7 +19,7 @@
 
 - [x] ~~**Port qpnp-linear-charger from 3.18.**~~ Done. Charger probes, battery PSY registered, charging works. Internal USB PSY added with 500mA default (no BC1.2 detection yet).
 
-- [ ] **BC1.2 USB charger type detection.** Extract the BC1.2 detection state machine from `phy-msm-usb.c` into a standalone driver that reads the SNPS 28nm PHY ULPI registers to distinguish SDP (500mA) / CDP (1500mA) / DCP (1500mA). Updates the LBC's internal USB PSY `current_max` automatically. See `charge_detection.md` for full plan.
+- [x] ~~**BC1.2 USB charger type detection.**~~ Done. LBC's USBIN_VALID IRQ triggers the msm_otg ULPI-based BC1.2 state machine. Detects SDP (100mA→500mA after enum) / CDP (1500mA) / DCP (1500mA). LBC internal USB PSY accepts `set_property(CURRENT_MAX)` from the PHY driver. Confirmed working: SDP detected when connected to PC, current ramps 100→500mA after gadget enumeration.
 
 - [ ] **Port qpnp-vm-bms from 3.18.** `qpnp-vm-bms.c` (compatible `qcom,qpnp-vm-bms`) also missing from CAF 4.4. Provides battery SOC estimation, voltage/current reporting. DTS node `pm8909_bms` already defined. Without it, battmon daemon reads VADC directly as a workaround.
 

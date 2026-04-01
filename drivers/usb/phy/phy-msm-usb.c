@@ -44,6 +44,7 @@
 #include <linux/usb/hcd.h>
 #include <linux/usb/msm_hsusb.h>
 #include <linux/usb/msm_hsusb_hw.h>
+#include <linux/power_supply.h>
 #include <linux/regulator/consumer.h>
 
 #define MSM_USB_BASE	(motg->regs)
@@ -661,12 +662,22 @@ skip_phy_resume:
 
 static void msm_otg_notify_charger(struct msm_otg *motg, unsigned mA)
 {
+	struct power_supply *usb_psy;
+	union power_supply_propval val;
+
 	if (motg->cur_power == mA)
 		return;
 
-	/* TODO: Notify PMIC about available current */
 	dev_info(motg->phy.dev, "Avail curr from USB = %u\n", mA);
 	motg->cur_power = mA;
+
+	usb_psy = power_supply_get_by_name("usb");
+	if (usb_psy) {
+		val.intval = mA * 1000;
+		power_supply_set_property(usb_psy,
+				POWER_SUPPLY_PROP_CURRENT_MAX, &val);
+		power_supply_put(usb_psy);
+	}
 }
 
 static int msm_otg_set_power(struct usb_phy *phy, unsigned mA)
@@ -1133,7 +1144,33 @@ static void msm_chg_detect_work(struct work_struct *w)
 	case USB_CHG_STATE_DETECTED:
 		msm_chg_block_off(motg);
 		dev_dbg(phy->dev, "charger = %d\n", motg->chg_type);
-		schedule_work(&motg->sm_work);
+		if (phy->otg->state == OTG_STATE_UNDEFINED) {
+			/*
+			 * ChipIdea manages the controller — don't touch
+			 * the OTG state machine.  Just notify the charger
+			 * PSY and release the PM reference we took in
+			 * USB_CHG_STATE_UNDEFINED.
+			 */
+			switch (motg->chg_type) {
+			case USB_DCP_CHARGER:
+				dev_info(phy->dev, "BC1.2: DCP (wall charger) detected\n");
+				msm_otg_notify_charger(motg, IDEV_CHG_MAX);
+				break;
+			case USB_CDP_CHARGER:
+				dev_info(phy->dev, "BC1.2: CDP detected\n");
+				msm_otg_notify_charger(motg, IDEV_CHG_MAX);
+				break;
+			case USB_SDP_CHARGER:
+				dev_info(phy->dev, "BC1.2: SDP (USB host) detected\n");
+				msm_otg_notify_charger(motg, IUNIT);
+				break;
+			default:
+				break;
+			}
+			pm_runtime_put_sync(phy->dev);
+		} else {
+			schedule_work(&motg->sm_work);
+		}
 		return;
 	default:
 		return;
@@ -1306,6 +1343,10 @@ static irqreturn_t msm_otg_irq(int irq, void *data)
 	 * handle BSV/ID interrupts here — let ci_irq do it.  Clearing
 	 * BSVIS would hide the VBUS change from chipidea, and scheduling
 	 * sm_work from UNDEFINED state resets the controller mid-flight.
+	 *
+	 * BC1.2 charger detection is triggered externally (from the PMIC
+	 * charger's USBIN_VALID IRQ) since OTGSC BSV is unreliable when
+	 * qcom,manual-pullup is enabled.
 	 */
 	if (phy->otg->state == OTG_STATE_UNDEFINED)
 		return IRQ_NONE;
