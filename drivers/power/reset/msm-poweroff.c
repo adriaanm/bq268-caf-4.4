@@ -580,6 +580,15 @@ skip_sysfs_create:
 			ret = -ENOMEM;
 			goto err_restart_reason;
 		}
+		/*
+		 * Clear stale restart reason left by bootloader (e.g.
+		 * 0x77665500 from "fastboot boot" session).  Without this,
+		 * an unexpected reset that bypasses do_msm_restart() leaves
+		 * the bootloader magic in IMEM, causing aboot to enter
+		 * fastboot instead of booting normally.
+		 */
+		__raw_writel(0x0, restart_reason);
+		mb();
 	}
 
 	mem = platform_get_resource_byname(pdev, IORESOURCE_MEM, "pshold-base");

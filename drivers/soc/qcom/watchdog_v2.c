@@ -490,8 +490,15 @@ static irqreturn_t wdog_bark_handler(int irq, void *dev_id)
 		wdog_dd->last_pet, nanosec_rem / 1000);
 	if (wdog_dd->do_ipi_ping)
 		dump_cpu_alive_mask(wdog_dd);
-	msm_trigger_wdog_bite();
-	panic("Failed to cause a watchdog bite! - Falling back to kernel panic!");
+	/*
+	 * Don't trigger an immediate watchdog bite here.  The bite kills
+	 * the SoC in ~30us via PS_HOLD deassertion, before the panic
+	 * handler can write to ramoops or configure warm reset.  Instead
+	 * call panic() directly — the panic_wdog_handler notifier re-arms
+	 * the watchdog with a generous timeout (panic_timeout + 10s) as a
+	 * failsafe in case the panic path hangs.
+	 */
+	panic("Watchdog bark! Watchdog did not get pet on time");
 	return IRQ_HANDLED;
 }
 

@@ -1360,6 +1360,11 @@
 			compatible = "qcom,msm-imem-restart_reason";
 			reg = <0x65c 4>;
 		};
+
+		dload_type@18 {
+			compatible = "qcom,msm-imem-dload-type";
+			reg = <0x18 4>;
+		};
 	};
 
 	qcom,mpm2-sleep-counter@4a3000 {
