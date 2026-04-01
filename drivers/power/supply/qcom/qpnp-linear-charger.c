@@ -3107,6 +3107,48 @@ static const struct power_supply_desc parallel_psy_desc = {
 	.property_is_writeable = qpnp_lbc_parallel_is_writeable,
 };
 
+/*
+ * Internal USB PSY — registered when no external USB PSY exists.
+ * Reports VBUS presence and current limit based on USBIN_VALID status.
+ * Without USB PHY BC1.2 detection, we default to 500mA (USB 2.0 SDP).
+ */
+#define LBC_USB_PSY_MA_DEFAULT	500
+
+static enum power_supply_property lbc_usb_psy_props[] = {
+	POWER_SUPPLY_PROP_ONLINE,
+	POWER_SUPPLY_PROP_CURRENT_MAX,
+	POWER_SUPPLY_PROP_TYPE,
+};
+
+static int lbc_usb_psy_get_property(struct power_supply *psy,
+		enum power_supply_property psp, union power_supply_propval *val)
+{
+	struct qpnp_lbc_chip *chip = power_supply_get_drvdata(psy);
+
+	switch (psp) {
+	case POWER_SUPPLY_PROP_ONLINE:
+		val->intval = qpnp_lbc_is_usb_chg_plugged_in(chip);
+		break;
+	case POWER_SUPPLY_PROP_CURRENT_MAX:
+		val->intval = chip->usb_psy_ma * 1000;
+		break;
+	case POWER_SUPPLY_PROP_TYPE:
+		val->intval = POWER_SUPPLY_TYPE_USB;
+		break;
+	default:
+		return -EINVAL;
+	}
+	return 0;
+}
+
+static const struct power_supply_desc lbc_usb_psy_desc = {
+	.name		= "usb",
+	.type		= POWER_SUPPLY_TYPE_USB,
+	.properties	= lbc_usb_psy_props,
+	.num_properties	= ARRAY_SIZE(lbc_usb_psy_props),
+	.get_property	= lbc_usb_psy_get_property,
+};
+
 static const struct power_supply_desc batt_psy_desc = {
 	.name		= "battery",
 	.type		= POWER_SUPPLY_TYPE_BATTERY,
@@ -3191,8 +3233,6 @@ static int qpnp_lbc_main_probe(struct platform_device *pdev)
 	int rc = 0;
 
 	usb_psy = power_supply_get_by_name("usb");
-	if (!usb_psy)
-		pr_warn("usb supply not found, USB current tracking disabled\n");
 
 	chip = devm_kzalloc(&pdev->dev, sizeof(struct qpnp_lbc_chip),
 				GFP_KERNEL);
@@ -3297,6 +3337,23 @@ static int qpnp_lbc_main_probe(struct platform_device *pdev)
 			rc = PTR_ERR(chip->batt_psy);
 			pr_err("batt failed to register rc=%d\n", rc);
 			goto fail_chg_enable;
+		}
+	}
+
+	/* Register internal USB PSY if no external one exists */
+	if (!chip->usb_psy) {
+		struct power_supply_config usb_cfg = { .drv_data = chip };
+
+		chip->usb_psy_ma = LBC_USB_PSY_MA_DEFAULT;
+		chip->usb_psy = power_supply_register(chip->dev,
+				&lbc_usb_psy_desc, &usb_cfg);
+		if (IS_ERR(chip->usb_psy)) {
+			rc = PTR_ERR(chip->usb_psy);
+			pr_err("usb psy failed to register rc=%d\n", rc);
+			chip->usb_psy = NULL;
+		} else {
+			pr_info("Registered internal USB PSY, default %dmA\n",
+				LBC_USB_PSY_MA_DEFAULT);
 		}
 	}
 
