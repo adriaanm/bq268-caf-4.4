@@ -17,7 +17,9 @@
 
 ## Normal Priority — Audio & Hardware
 
-- [ ] **Port qpnp-linear-charger from 3.18.** `qpnp-linear-charger.c` (compatible `qcom,qpnp-linear-charger`) missing from CAF 4.4 — dropped in favor of `qpnp-smb2` for newer PMICs. PM8909 needs the old driver. DTS nodes already correct (`pm8909_chg` in `msm-pm8909.dtsi` + overrides in bq268 DTS). PMIC charges in hardware without the driver, but no `/sys/class/power_supply/battery` for status/control.
+- [x] ~~**Port qpnp-linear-charger from 3.18.**~~ Done. Charger probes, battery PSY registered, charging works. Internal USB PSY added with 500mA default (no BC1.2 detection yet).
+
+- [ ] **BC1.2 USB charger type detection.** Extract the BC1.2 detection state machine from `phy-msm-usb.c` into a standalone driver that reads the SNPS 28nm PHY ULPI registers to distinguish SDP (500mA) / CDP (1500mA) / DCP (1500mA). Updates the LBC's internal USB PSY `current_max` automatically. See `charge_detection.md` for full plan.
 
 - [ ] **Port qpnp-vm-bms from 3.18.** `qpnp-vm-bms.c` (compatible `qcom,qpnp-vm-bms`) also missing from CAF 4.4. Provides battery SOC estimation, voltage/current reporting. DTS node `pm8909_bms` already defined. Without it, battmon daemon reads VADC directly as a workaround.
 
