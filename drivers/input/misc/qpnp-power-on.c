@@ -2307,6 +2307,16 @@ static int qpnp_pon_probe(struct platform_device *pdev)
 					"qcom,store-hard-reset-reason");
 
 	qpnp_pon_debugfs_init(pdev);
+
+	/*
+	 * Default PMIC to warm reset so unexpected crashes that bypass
+	 * the kernel (instant SoC death / PS_HOLD deassertion) preserve
+	 * DDR contents for ramoops/pstore.  The kernel restart path
+	 * overrides this to hard reset for clean reboots.
+	 */
+	if (sys_reset)
+		qpnp_pon_system_pwr_off(PON_POWER_OFF_WARM_RESET);
+
 	return 0;
 }
 

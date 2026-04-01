@@ -69,7 +69,7 @@ static void scm_disable_sdi(void);
 #endif
 
 static int in_panic;
-static int download_mode = 1;
+static int download_mode;
 static struct kobject dload_kobj;
 static void *dload_mode_addr, *dload_type_addr;
 static bool dload_mode_enabled;
@@ -281,7 +281,10 @@ static void msm_restart_prepare(const char *cmd)
 			(in_panic || restart_mode == RESTART_DLOAD));
 #endif
 
-	if (qpnp_pon_check_hard_reset_stored()) {
+	/* Always warm-reset on panic so ramoops/pstore survives. */
+	if (in_panic) {
+		need_warm_reset = true;
+	} else if (qpnp_pon_check_hard_reset_stored()) {
 		/* Set warm reset as true when device is in dload mode */
 		if (get_dload_mode() ||
 			((cmd != NULL && cmd[0] != '\0') &&
