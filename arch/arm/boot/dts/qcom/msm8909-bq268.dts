@@ -27,10 +27,10 @@
 	qcom,board-id = <0x08 0x100>;
 
 	reserved-memory {
-		ramoops_mem: ramoops@9ff00000 {
+		ramoops_mem: ramoops@8f500000 {
 			compatible = "shared-dma-pool";
 			no-map;
-			reg = <0x0 0x9ff00000 0x0 0x100000>;
+			reg = <0x0 0x8f500000 0x0 0x100000>;
 		};
 	};
 
