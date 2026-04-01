@@ -21,7 +21,7 @@
 
 - [x] ~~**BC1.2 USB charger type detection.**~~ Done. LBC's USBIN_VALID IRQ triggers the msm_otg ULPI-based BC1.2 state machine. Detects SDP (100mA→500mA after enum) / CDP (1500mA) / DCP (1500mA). LBC internal USB PSY accepts `set_property(CURRENT_MAX)` from the PHY driver. Confirmed working: SDP detected when connected to PC, current ramps 100→500mA after gadget enumeration.
 
-- [ ] **Port qpnp-vm-bms from 3.18.** `qpnp-vm-bms.c` (compatible `qcom,qpnp-vm-bms`) also missing from CAF 4.4. Provides battery SOC estimation, voltage/current reporting. DTS node `pm8909_bms` already defined. Without it, battmon daemon reads VADC directly as a workaround.
+- [x] ~~**Port qpnp-vm-bms from 3.18.**~~ Already present and probing in 4.4. Fixed two issues: (1) stale shutdown OCV register caused 0% SOC — added `qcom,ignore-shutdown-soc` to DTS. (2) `monitor_soc_work` stopped rescheduling before `voltage_soc_timeout_work` flipped to voltage-based mode — restart it from the timeout. Now reports correct SOC (74% at 4.01V charging).
 
 - [ ] **Test microphone capture.** Speaker playback works but mic input is untested. Need to find TX capture mixer path (AMIC1/AMIC3 via `MIC BIAS Internal1`), test with `arecord`. Check stock `mixer_paths.xml` for capture route. Blocker for walkie-talkie use case.
 

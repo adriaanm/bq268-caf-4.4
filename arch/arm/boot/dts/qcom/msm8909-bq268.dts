@@ -540,6 +540,14 @@
 
 &pm8909_bms {
 	qcom,force-s2-in-charging;
+	/*
+	 * Ignore the shutdown OCV/SOC stored in the BMS backup register.
+	 * With RAM-boot workflow (fastboot boot), the register retains
+	 * stale values from a previous session, causing bogus 0% SOC
+	 * even when the battery is near full.  Forces a fresh OCV
+	 * estimate at every boot.
+	 */
+	qcom,ignore-shutdown-soc;
 };
 
 /* ════════════════════════════════════════════════════════════════════════

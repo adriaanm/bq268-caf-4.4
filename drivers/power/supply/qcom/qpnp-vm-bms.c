@@ -2158,6 +2158,13 @@ static void voltage_soc_timeout_work(struct work_struct *work)
 	if (!chip->bms_dev_open) {
 		pr_warn("BMS device not opened, using voltage based SOC\n");
 		chip->dt.cfg_use_voltage_soc = true;
+		/*
+		 * monitor_soc_work may have stopped scheduling itself
+		 * (last_soc == calculated_soc while cfg_use_voltage_soc
+		 * was still false).  Restart it so the voltage-based
+		 * SOC path actually runs.
+		 */
+		schedule_delayed_work(&chip->monitor_soc_work, 0);
 	}
 	mutex_unlock(&chip->bms_device_mutex);
 }
