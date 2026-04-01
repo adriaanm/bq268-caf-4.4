@@ -23,7 +23,7 @@
 
 - [x] ~~**Port qpnp-vm-bms from 3.18.**~~ Already present and probing in 4.4. Fixed two issues: (1) stale shutdown OCV register caused 0% SOC — added `qcom,ignore-shutdown-soc` to DTS. (2) `monitor_soc_work` stopped rescheduling before `voltage_soc_timeout_work` flipped to voltage-based mode — restart it from the timeout. Now reports correct SOC (74% at 4.01V charging).
 
-- [ ] **Test microphone capture.** Speaker playback works but mic input is untested. Need to find TX capture mixer path (AMIC1/AMIC3 via `MIC BIAS Internal1`), test with `arecord`. Check stock `mixer_paths.xml` for capture route. Blocker for walkie-talkie use case.
+- [x] ~~**Test microphone capture.**~~ Working. TX capture uses TERT_MI2S_TX (not PRI_MI2S_TX — machine driver routes RX via Primary, TX via Tertiary MI2S). Mixer path: `MultiMedia1 Mixer TERT_MI2S_TX=1`, `DEC1 MUX=ADC1`, `ADC1 Volume=8`, `DEC1 Volume=104`. Record: `arecord -D hw:0,0 -f S16_LE -r 48000 -c 1`. Handset mic (AMIC1) confirmed working with loopback test.
 
 - [ ] **Test with SIM card inserted.** Modem RF works (sees networks) but NAS status is `limited` (no SIM). BAM DMUX A2_POWER_CONTROL may require PS-attached state. Insert prepaid SIM → check if A2 activates → if yes, rmnet interfaces should come up.
 
