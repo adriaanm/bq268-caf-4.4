@@ -3332,11 +3332,8 @@ static int qpnp_adc_tm_suspend_noirq(struct device *dev)
 {
 	struct qpnp_adc_tm_chip *chip = dev_get_drvdata(dev);
 
-	if (atomic_read(&chip->wq_cnt) != 0) {
-		pr_err(
-			"Aborting suspend, adc_tm notification running while suspending\n");
-		return -EBUSY;
-	}
+	if (atomic_read(&chip->wq_cnt) != 0)
+		pr_debug("adc_tm notification pending, proceeding with suspend\n");
 	return 0;
 }
 

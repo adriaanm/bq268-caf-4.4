@@ -22,6 +22,7 @@
 #include <linux/module.h>
 #include <linux/reboot.h>
 #include <linux/pm.h>
+#include <linux/suspend.h>
 #include <linux/delay.h>
 #include <linux/input/qpnp-power-on.h>
 #include <linux/of_address.h>
@@ -495,6 +496,17 @@ static struct attribute_group reset_attr_group = {
 };
 #endif
 
+static int msm_suspend_enter(suspend_state_t state)
+{
+	cpu_do_idle();
+	return 0;
+}
+
+static const struct platform_suspend_ops msm_suspend_ops = {
+	.enter = msm_suspend_enter,
+	.valid = suspend_valid_only_mem,
+};
+
 static int msm_restart_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -609,6 +621,12 @@ skip_sysfs_create:
 
 	pm_power_off = do_msm_poweroff;
 	arm_pm_restart = do_msm_restart;
+
+	/* Register minimal suspend ops (WFI-only).  lpm-levels is disabled
+	 * because deep idle breaks timers, but we still need suspend-to-RAM
+	 * for power-off (no KPDPWR_N button, so true PMIC shutdown can't
+	 * wake).  GPIO wakeup interrupts resume from WFI. */
+	suspend_set_ops(&msm_suspend_ops);
 
 	if (scm_is_call_available(SCM_SVC_PWR, SCM_IO_DISABLE_PMIC_ARBITER) > 0)
 		scm_pmic_arbiter_disable_supported = true;
