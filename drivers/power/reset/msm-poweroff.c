@@ -281,19 +281,14 @@ static void msm_restart_prepare(const char *cmd)
 			(in_panic || restart_mode == RESTART_DLOAD));
 #endif
 
-	/* Always warm-reset on panic so ramoops/pstore survives. */
-	if (in_panic) {
-		need_warm_reset = true;
-	} else if (qpnp_pon_check_hard_reset_stored()) {
-		/* Set warm reset as true when device is in dload mode */
-		if (get_dload_mode() ||
-			((cmd != NULL && cmd[0] != '\0') &&
-			!strcmp(cmd, "edl")))
-			need_warm_reset = true;
-	} else {
-		need_warm_reset = (get_dload_mode() ||
-				(cmd != NULL && cmd[0] != '\0'));
-	}
+	/*
+	 * Warm reset preserves IMEM (restart_reason for aboot) and DDR
+	 * (ramoops).  Use it for panic, any reboot command (bootloader,
+	 * recovery, etc.), and dload mode.  Plain reboot (cmd=NULL, no
+	 * panic) gets hard reset for a clean power cycle.
+	 */
+	need_warm_reset = (in_panic || get_dload_mode() ||
+			   (cmd != NULL && cmd[0] != '\0'));
 
 	/* Hard reset the PMIC unless memory contents must be maintained. */
 	if (need_warm_reset) {
@@ -403,8 +398,14 @@ static void do_msm_poweroff(void)
 	set_dload_mode(0);
 	scm_disable_sdi();
 	qpnp_pon_system_pwr_off(PON_POWER_OFF_SHUTDOWN);
-	/* Disable CBL power-on trigger so PMIC stays off */
+	/* Disable auto-power-on triggers that fire spuriously (CBL is
+	 * tied to battery, USB detects the charging circuit).  Keep
+	 * KPDPWR_N (power button) enabled so user can turn device on. */
 	qpnp_pon_trigger_config(PON_CBLPWR_N, false);
+	qpnp_pon_trigger_config(PON_USB_CHG, false);
+	qpnp_pon_trigger_config(PON_DC_CHG, false);
+	qpnp_pon_trigger_config(PON_SMPL, false);
+	qpnp_pon_trigger_config(PON_KPDPWR_N, true);
 
 	halt_spmi_pmic_arbiter();
 	deassert_ps_hold();
