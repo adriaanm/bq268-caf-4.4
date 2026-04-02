@@ -15,6 +15,7 @@
 #include <linux/module.h>
 #include <linux/cdev.h>
 #include <linux/fs.h>
+#include <linux/poll.h>
 #include <linux/device.h>
 #include <linux/delay.h>
 #include <linux/uaccess.h>
@@ -3304,10 +3305,31 @@ static int diag_real_time_info_init(void)
 	return 0;
 }
 
+static unsigned int diagchar_poll(struct file *file, poll_table *wait)
+{
+	int i;
+	int index = -1;
+
+	for (i = 0; i < driver->num_clients; i++)
+		if (driver->client_map[i].pid == current->tgid)
+			index = i;
+
+	if (index == -1)
+		return POLLERR;
+
+	poll_wait(file, &driver->wait_q, wait);
+
+	if (driver->data_ready[index])
+		return POLLIN | POLLRDNORM;
+
+	return 0;
+}
+
 static const struct file_operations diagcharfops = {
 	.owner = THIS_MODULE,
 	.read = diagchar_read,
 	.write = diagchar_write,
+	.poll = diagchar_poll,
 #ifdef CONFIG_COMPAT
 	.compat_ioctl = diagchar_compat_ioctl,
 #endif

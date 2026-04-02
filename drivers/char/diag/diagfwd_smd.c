@@ -521,6 +521,8 @@ static void __diag_smd_init(struct diag_smd_info *smd_info)
 		 smd_info->name, smd_info->fwd_ctxt);
 }
 
+static void smd_late_init(struct diag_smd_info *smd_info);
+
 int diag_smd_init(void)
 {
 	uint8_t peripheral;
@@ -533,10 +535,40 @@ int diag_smd_init(void)
 				      (void *)smd_info, &smd_ops,
 				      &smd_info->fwd_ctxt);
 		smd_info->inited = 1;
+
+		/*
+		 * On SMD-only platforms (no socket/glink), transport
+		 * negotiation never fires, so:
+		 *
+		 * 1. CNTL: diagfwd_close_transport() never copies
+		 *    early_init_info → peripheral_info[TYPE_CNTL].
+		 *    Do the copy here, then redirect fwd_ctxt so
+		 *    ch_open is set on the structure that
+		 *    diag_send_feature_mask_update() checks.
+		 *
+		 * 2. DATA/CMD/DCI: diag_smd_init_peripheral() is
+		 *    never called.  Register them now.
+		 */
+		{
+			struct diagfwd_info *src = smd_info->fwd_ctxt;
+			struct diagfwd_info *dst =
+				driver->diagfwd_cntl[peripheral];
+			dst->ctxt = src->ctxt;
+			dst->p_ops = src->p_ops;
+			dst->c_ops = src->c_ops;
+			dst->transport = TRANSPORT_SMD;
+			dst->inited = 1;
+			smd_info->fwd_ctxt = dst;
+		}
+
 		__diag_smd_init(&smd_data[peripheral]);
 		__diag_smd_init(&smd_cmd[peripheral]);
 		__diag_smd_init(&smd_dci[peripheral]);
 		__diag_smd_init(&smd_dci_cmd[peripheral]);
+		smd_late_init(&smd_data[peripheral]);
+		smd_late_init(&smd_cmd[peripheral]);
+		smd_late_init(&smd_dci[peripheral]);
+		smd_late_init(&smd_dci_cmd[peripheral]);
 	}
 
 	platform_driver_register(&diag_smd_cntl_driver);
