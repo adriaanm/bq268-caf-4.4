@@ -371,6 +371,7 @@ struct msm_spi {
 	struct pinctrl_state	*pins_active;
 	struct pinctrl_state	*pins_sleep;
 	bool			is_init_complete;
+	bool			is_dma_mapped;
 };
 
 /* Forward declaration */

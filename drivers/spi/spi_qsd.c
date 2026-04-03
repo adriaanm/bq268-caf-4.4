@@ -1069,6 +1069,15 @@ static int msm_spi_bam_map_buffers(struct msm_spi *dd)
 	void *tx_buf, *rx_buf;
 	u32 tx_len, rx_len;
 
+	/* Caller already provided valid DMA addresses (e.g. fbtft with
+	 * a dma_alloc_coherent buffer).  Skip mapping to avoid redundant
+	 * cache maintenance and to not overwrite the pre-set tx_dma/rx_dma
+	 * with an address derived from dma_map_single on what may be a
+	 * non-linear-mapped (vmalloc) coherent buffer.
+	 */
+	if (dd->is_dma_mapped)
+		return 0;
+
 	dev = dd->dev;
 	xfr = dd->cur_transfer;
 
@@ -1117,6 +1126,9 @@ static void msm_spi_bam_unmap_buffers(struct msm_spi *dd)
 	struct spi_transfer *xfr;
 	void *tx_buf, *rx_buf;
 	u32  tx_len, rx_len;
+
+	if (dd->is_dma_mapped)
+		return;
 
 	dev = dd->dev;
 	xfr = dd->cur_transfer;
@@ -1590,6 +1602,7 @@ static int msm_spi_transfer_one(struct spi_master *master,
 	}
 	dd->spi = spi;
 	dd->cur_transfer = xfer;
+	dd->is_dma_mapped = master->cur_msg->is_dma_mapped;
 
 	mutex_lock(&dd->core_lock);
 
