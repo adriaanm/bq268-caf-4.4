@@ -46,8 +46,11 @@ Every repeated command goes in the `justfile`. Run `just` to list recipes.
 
 1. **Commit first** — git commit before building/flashing
 2. **Build** — `just bootimg` (builds kernel + modules + boot.img)
-3. **Flash or boot** — `just flash` (permanent) or `just boot` (RAM-only)
-4. **Record outcome** — `just note "PASS: description"` or `just note "FAIL: description"`
+3. **Reboot to fastboot** — `just dev-reboot` (fast — do this after build, not before)
+4. **Flash or boot** — `just flash` (permanent) or `just boot` (RAM-only)
+5. **Record outcome** — `just note "PASS: description"` or `just note "FAIL: description"`
+
+**Important**: Build first, then reboot. The build is slow (~minutes), the reboot is fast (~seconds). Don't leave the device sitting in fastboot while building.
 
 ## Workflow: Iteration Cycle
 

@@ -1,23 +1,27 @@
 # Tasks
 
-## High Priority — Modem Bringup
+## ~~High Priority — Modem Bringup~~ COMPLETE
+
+Modem fully working: rmt_storage, PPP over SMD data path, AT commands, RF/network scan. See CLAUDE.md for architecture decisions (PPP over SMD, not BAM DMUX).
+
+<details><summary>Completed items</summary>
+
 - [x] **~~Disable CONFIG_ANDROID_PARANOID_NETWORK~~** Set `CONFIG_ANDROID_PARANOID_NETWORK=n` in defconfig. Verified in output/.config.
+- [x] **~~Fix hyp_assign_phys failure for rmtfs shared memory~~** — Non-fatal. MSM8909 TZ doesn't implement `MEM_PROT_ASSIGN_ID` (0x16). No fix needed.
+- [x] **~~Write/port rmt_storage daemon for Alpine.~~** Done in `~/bq268-alpine/tools/rmt_storage.c`.
+- [x] **~~Test modem with rmt_storage running.~~** Modem fully initializes: APR audio, DIAG, DATA channels all working.
+- [x] ~~**BAM DMUX data path.**~~ Won't fix — MSM8909 modem uses PPP over SMD, not BAM DMUX.
+- [x] **~~Port `msm_rmnet_bam.c` from 3.18.~~** Done (unused — PPP path used instead).
 
-- [x] **~~Fix hyp_assign_phys failure for rmtfs shared memory~~** — Error is already non-fatal (probe continues, UIO devices created). MSM8909 TZ doesn't implement `MEM_PROT_ASSIGN_ID` (0x16) but shared memory at 0x87c00000 is statically accessible by both HLOS and MSS. Both 3.18 and 4.4 have the same call; it likely also fails silently on stock. No fix needed.
+</details>
 
-- [x] **~~Write/port rmt_storage daemon for Alpine.~~** Done in `~/bq268-alpine/tools/rmt_storage.c`. Serves modem EFS via `/dev/uio0` (rmtfs shared mem). Bug found: `phys_offset` in RW_IOVEC is buffer-relative, not absolute — fixed by adding `shmem.phys_addr` base.
+## High Priority — Stability
 
-- [x] **~~Test modem with rmt_storage running.~~** Modem fully initializes: APR audio OPENED, DIAG channels OPENED, DATA1-4/DS channels created (modem OPENING, AP CLOSED). No watchdog crash. EFS read+write confirmed working.
+- [ ] **Spontaneous reboot during interactive use (wata fbclient).** Observed multiple times since 2026-04-01. Crash bypasses kernel entirely — no watchdog bark, no panic, no dmesg-ramoops. PMIC PON: `Hard Reset`, POFF: `PS_HOLD`. **2026-04-03 update:** Latest crash was a **warm** boot (not cold like previous crashes). Ramoops console zone preserved 31KB but dmesg zones empty (no panic). Pstore was NOT mounted (was missing from fstab despite previous notes) — fixed now. **Ruled out:** (a) Modem — reproduced with modem disabled. (b) Pure network stress — 200MB WiFi, 50 HTTPS requests pass. (c) Pure display stress — 1000 framebuffer writes pass. (d) Combined network+display — 500 rounds pass. (e) CPU frequency — crashes at 200MHz with 2 CPUs. (f) Key presses alone — pressed keys during all synthetic tests, no crash. **Only reproduces with wata** (multi-threaded fbclient: key input + Matrix HTTP sync + framebuffer rendering). Similar crashes seen on 6.19 mainline kernel under heavy DDR write traffic. Likely hardware-level: SPI DMA (display) or WCNSS DXE (WiFi) bus contention causing SoC death. QCOM_BUS_SCALING disabled (crashes at boot) so no DDR QoS arbitration. **Debugging infra:** ramoops at 0x8f500000 (aboot-safe), pstore in fstab (mount added 2026-04-03), warm reset default, download_mode=0, watchdog bark→panic(), panic_on_oops=0 (should enable). **Next steps:** (a) Add pstore mount to fstab in rootfs. (b) Set panic_on_oops=1 in cmdline. (c) Reproduce crash and check pstore. (d) Try disabling display (fbtft) while running wata over SSH. (e) Investigate QCOM_BUS_SCALING boot crash. (f) Check SPI BAM DMA interaction with WCNSS DXE.
 
-- [ ] **BAM DMUX data path handshake.** SMSM A2_POWER_CONTROL never set by modem. BAM hardware confirmed working (force init registers BAM 0x04044000, 6 pipes, ver 0x25). But forcing it crashes modem: `a2_power.c:2783:A2 Assertion Failed`. **Key finding (2026-03-23):** Modem defaults to `shutting-down` operating mode — must send `qmicli --dms-set-operating-mode=online` (stock Android's rild does this). After setting online: RF works (UMTS scan, sees MCC228/MNC3 Swisscom), NAS status `limited` (no SIM). A2 still not set — may require PS-attached state (needs SIM). Next: test with SIM card inserted.
-
-- [x] **~~Port `msm_rmnet_bam.c` from 3.18.~~** Done. Copied from 3.18, adapted `net_device_stats` to `dev->stats`, stubbed flow control ioctls (need `CONFIG_NET_SCHED`). Driver registers platform drivers for `bam_dmux_ch_0`-`bam_dmux_ch_20` at boot. `CONFIG_USB_BAM` crashes at probe — disabled.
+## Normal Priority — Modem & Diagnostics
 
 - [ ] **Get modem DIAG logs working.** Tool: `tools/diag_read.c`. Build: `just diag-build`. Deploy: `just diag-deploy`. **Partially working:** /dev/diag opens, SWITCH_LOGGING to MEMORY_DEVICE_MODE succeeds, reader thread (pthread) receives mask updates (MSG/EVENT/LOG), SET_ALL_MSG_MASK command sent and propagated to modem. **Not working yet:** No F3 messages arrive — modem DIAG DATA SMD channel (ch9) shows zero traffic in both directions. Modem CNTL channel has unread data (APPS RDPTR=0 vs MDMSW WRPTR=0x1B6B). **Known issues:** (1) DIAG session cleanup on close is broken — stale `md_session_mask` blocks subsequent runs, requires reboot. (2) `USER_SPACE_RAW_DATA_TYPE` write path blocks if `in_busy_pktdata=1` — solved via pthread reader thread. (3) HDLC toggle ioctl causes D-state (kernel mutex contention in `diag_update_md_clients`) — disabled for now. **Next steps:** (a) Investigate why modem CNTL data isn't fully consumed by APPS, (b) try per-SSID mask (SET_MSG_MASK) instead of SET_ALL, (c) consider USB DIAG gadget approach as alternative to /dev/diag.
-
-## Normal Priority — Stability
-
-- [ ] **Spontaneous reboot during interactive use (wata fbclient).** Observed multiple times 2026-04-01. PMIC PON: `Hard Reset` + **cold** boot, POFF: `PS_HOLD`. Crash bypasses kernel entirely — no watchdog bark, no panic, instant SoC death. PMIC always does cold reset (DDR power lost) despite warm reset configured at probe — ramoops/pstore cannot capture this crash type. **Ruled out:** (a) Modem — reproduced with modem disabled. (b) Pure network stress — 200MB WiFi, 50 HTTPS requests pass. (c) Pure display stress — 1000 framebuffer writes pass. (d) Combined network+display — 500 rounds pass. (e) CPU frequency — crashes at 200MHz with 2 CPUs. (f) Key presses alone — pressed keys during all synthetic tests, no crash. **Only reproduces with wata** (multi-threaded fbclient: key input + Matrix HTTP sync + framebuffer rendering). Similar crashes seen on 6.19 mainline kernel under heavy DDR write traffic. Likely hardware-level: SPI DMA (display) or WCNSS DXE (WiFi) bus contention causing SoC death. QCOM_BUS_SCALING disabled (crashes at boot) so no DDR QoS arbitration. **Debugging infra in place:** ramoops at 0x8f500000 (aboot-safe), pstore in fstab, warm reset default, download_mode=0, watchdog bark→panic(). Works for kernel panics (sysrq-c test: warm boot + pstore data confirmed). **Next ideas:** investigate SPI BAM DMA interaction with WCNSS DXE; check SMMU/XPU config for WCNSS; try disabling display (fbtft) while running wata over SSH; investigate QCOM_BUS_SCALING boot crash.
 
 ## Normal Priority — Audio & Hardware
 
