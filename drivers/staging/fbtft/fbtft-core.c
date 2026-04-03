@@ -383,6 +383,16 @@ static void fbtft_update_display(struct fbtft_par *par, unsigned start_line,
 	fbtft_par_dbg(DEBUG_UPDATE_DISPLAY, par, "%s(start_line=%u, end_line=%u)\n",
 		__func__, start_line, end_line);
 
+	/*
+	 * Lock the SPI bus for the entire set_addr_win + write_vmem
+	 * sequence.  This ensures the D/C GPIO state is consistent with
+	 * the data on the wire (matching mainline MIPI DBI discipline)
+	 * and prevents interleaving with other SPI traffic.
+	 */
+	if (par->spi)
+		spi_bus_lock(par->spi->master);
+	par->bus_locked = true;
+
 	if (par->fbtftops.set_addr_win)
 		par->fbtftops.set_addr_win(par, 0, start_line,
 				par->info->var.xres - 1, end_line);
@@ -394,6 +404,10 @@ static void fbtft_update_display(struct fbtft_par *par, unsigned start_line,
 		dev_err_ratelimited(par->info->device,
 			"%s: write_vmem failed to update display buffer\n",
 			__func__);
+
+	par->bus_locked = false;
+	if (par->spi)
+		spi_bus_unlock(par->spi->master);
 
 	if (unlikely(timeit)) {
 		ts_end = ktime_get();

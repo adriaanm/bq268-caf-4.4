@@ -247,6 +247,7 @@ struct fbtft_par {
 	unsigned long debug;
 	bool first_update_done;
 	int update_in_progress;
+	bool bus_locked;	/* SPI bus lock held — use spi_sync_locked */
 	ktime_t update_time;
 	bool bgr;
 	bool blanked;

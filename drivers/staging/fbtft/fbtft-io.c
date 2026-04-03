@@ -4,30 +4,65 @@
 #include <linux/spi/spi.h>
 #include "fbtft.h"
 
+/*
+ * Maximum single SPI transfer size.  The 4.4 SPI framework doesn't have
+ * spi_max_transfer_size(), so we use the master's max_dma_len if set,
+ * otherwise fall back to 65520 (64 KB - 16, matching spi_qsd's
+ * SPI_MAX_TRFR_BTWN_RESETS).  Aligned down to 2 bytes for RGB565.
+ */
+static size_t fbtft_spi_max_chunk(struct spi_device *spi)
+{
+	size_t max = spi->master->max_dma_len;
+
+	if (!max)
+		max = (64 * 1024) - 16;
+	return max & ~(size_t)1;  /* align to 16-bit pixel boundary */
+}
+
 int fbtft_write_spi(struct fbtft_par *par, void *buf, size_t len)
 {
-	struct spi_transfer t = {
-		.tx_buf = buf,
-		.len = len,
-	};
-	struct spi_message m;
+	struct spi_device *spi = par->spi;
+	bool use_dma = par->txbuf.dma && buf == par->txbuf.buf;
+	dma_addr_t dma_base = par->txbuf.dma;
+	size_t max_chunk = fbtft_spi_max_chunk(spi);
+	size_t offset = 0;
+	int ret;
 
 	fbtft_par_dbg_hex(DEBUG_WRITE, par, par->info->device, u8, buf, len,
 		"%s(len=%d): ", __func__, len);
 
-	if (!par->spi) {
+	if (!spi) {
 		dev_err(par->info->device,
 			"%s: par->spi is unexpectedly NULL\n", __func__);
 		return -1;
 	}
 
-	spi_message_init(&m);
-	if (par->txbuf.dma && buf == par->txbuf.buf) {
-		t.tx_dma = par->txbuf.dma;
-		m.is_dma_mapped = 1;
+	while (offset < len) {
+		size_t chunk = min(len - offset, max_chunk);
+		struct spi_transfer t = {
+			.tx_buf = buf + offset,
+			.len = chunk,
+		};
+		struct spi_message m;
+
+		spi_message_init(&m);
+		if (use_dma) {
+			t.tx_dma = dma_base + offset;
+			m.is_dma_mapped = 1;
+		}
+		spi_message_add_tail(&t, &m);
+
+		if (par->bus_locked)
+			ret = spi_sync_locked(spi, &m);
+		else
+			ret = spi_sync(spi, &m);
+		if (ret)
+			return ret;
+
+		offset += chunk;
 	}
-	spi_message_add_tail(&t, &m);
-	return spi_sync(par->spi, &m);
+
+	return 0;
 }
 EXPORT_SYMBOL(fbtft_write_spi);
 
