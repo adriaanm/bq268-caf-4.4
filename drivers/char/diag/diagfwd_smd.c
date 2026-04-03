@@ -556,6 +556,9 @@ int diag_smd_init(void)
 			dst->ctxt = src->ctxt;
 			dst->p_ops = src->p_ops;
 			dst->c_ops = src->c_ops;
+			dst->ch_open = src->ch_open;
+			atomic_set(&dst->opened,
+				   atomic_read(&src->opened));
 			dst->transport = TRANSPORT_SMD;
 			dst->inited = 1;
 			smd_info->fwd_ctxt = dst;

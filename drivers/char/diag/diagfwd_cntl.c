@@ -49,8 +49,7 @@ void diag_cntl_channel_open(struct diagfwd_info *p_info)
 {
 	if (!p_info)
 		return;
-	driver->mask_update |= PERIPHERAL_MASK(p_info->peripheral);
-	queue_work(driver->cntl_wq, &driver->mask_update_work);
+	diag_send_updates_peripheral(p_info->peripheral);
 	diag_notify_md_client(p_info->peripheral, DIAG_STATUS_OPEN);
 }
 
@@ -386,6 +385,37 @@ static void process_incoming_feature_mask(uint8_t *buf, uint32_t len,
 
 	process_socket_feature(peripheral);
 	process_log_on_demand_feature(peripheral);
+
+	/*
+	 * MSM8909 modem firmware receives the AP feature mask but never
+	 * sends command registrations back. Register known subsystems as
+	 * a fallback so DIAG commands are forwarded to the modem.
+	 */
+	if (peripheral == PERIPHERAL_MODEM) {
+		static const uint8_t ss[] = {
+			0x03, 0x04, 0x06, 0x08, 0x0A, 0x0C,
+			0x13, 0x14, 0x19, 0x1E, 0x2D, 0x32,
+			0x33, 0x3B, 0x3F, 0x44, 0x48, 0x50,
+		};
+		struct diag_cmd_reg_entry_t e;
+		int j, total = 0;
+
+		for (j = 0; j < ARRAY_SIZE(ss); j++) {
+			e.cmd_code = DIAG_CMD_DIAG_SUBSYS;
+			e.subsys_id = ss[j];
+			e.cmd_code_lo = 0;
+			e.cmd_code_hi = 0xFFFF;
+			if (!diag_cmd_add_reg(&e, peripheral, INVALID_PID))
+				total++;
+		}
+		/* Legacy commands (peek/poke/version/NV/SPC) */
+		e.cmd_code = DIAG_CMD_NO_SUBSYS;
+		e.subsys_id = DIAG_CMD_NO_SUBSYS;
+		e.cmd_code_lo = 0;
+		e.cmd_code_hi = 0xFF;
+		if (!diag_cmd_add_reg(&e, peripheral, INVALID_PID))
+			total++;
+	}
 }
 
 static void process_last_event_report(uint8_t *buf, uint32_t len,
