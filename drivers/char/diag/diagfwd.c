@@ -942,6 +942,21 @@ int diag_process_apps_pkt(unsigned char *buf, int len,
 	}
 	mutex_unlock(&driver->cmd_reg_mutex);
 
+	/*
+	 * MSM8909 modem fallback: if no registered handler found,
+	 * forward the command to the modem anyway. The modem's DIAG
+	 * task doesn't send command registrations on this firmware.
+	 */
+	if (driver->feature[PERIPHERAL_MODEM].rcvd_feature_mask) {
+		write_len = diagfwd_write(PERIPHERAL_MODEM, TYPE_CMD,
+					  buf, len);
+		if (write_len != -ENODEV) {
+			pr_debug("diag: modem fallback fwd cmd=%02x len=%d ret=%d\n",
+				 *buf, len, write_len);
+			return write_len;
+		}
+	}
+
 #if defined(CONFIG_DIAG_OVER_USB)
 	/* Check for the command/respond msg for the maximum packet length */
 	if ((*buf == 0x4b) && (*(buf+1) == 0x12) &&
