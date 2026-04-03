@@ -325,7 +325,7 @@
 			rotate = <90>;
 			fps = <30>;
 			buswidth = <8>;
-			txbuflen = <16384>;
+			txbuflen = <40960>; /* full frame: 160*128*2 = 1 SPI xfer */
 			width = <128>;
 			height = <160>;
 		};
