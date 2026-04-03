@@ -110,6 +110,7 @@ When porting a subsystem from 3.18 to 4.4:
 | GCC 7.4 | GCC 8+ breaks BUILD_BUG_ON; GCC 4.9 works but old |
 | lpm-levels disabled | Breaks timer in idle; sleep hangs. WFI via default arch_cpu_idle works. |
 | always-on arch timer | Prevents C3STOP handoff to broken broadcast timer |
+| fbtft display (not MDP3) | 160×128 ST7735S SPI panel via `fb_st7735r` (fbtft staging driver) on SPI5 (BLSP1 QUP5). MDSS SPI panel driver disabled. SPI uses BAM DMA via CAF `spi_qsd.c`. |
 | PPP over SMD | Modem data path is PPP over SMD (smd7), not BAM DMUX. AT commands for APN/PDP, then pppd over the SMD tty. |
 | ~~BAM DMUX~~ | ~~Not used on MSM8909~~ — modem never sets SMSM A2_POWER_CONTROL; 0x4044000 not mapped in iomem. |
 | ~~Two-hop reboot~~ | ~~4.4 SPMI children don't enumerate → no PON → reboot via 3.18~~ (resolved: SPMI+PON work, direct reboot-to-bootloader from 4.4) |
@@ -124,6 +125,7 @@ When porting a subsystem from 3.18 to 4.4:
 | Modem Q6 stalled init | **Resolved** | Root cause: modem needs `rmt_storage` daemon for EFS partition I/O. Without it, modem init stalls at 55s watchdog. With rmt_storage running, modem fully initializes: APR audio, DIAG, DATA channels all created. |
 | BAM DMUX data path | **Won't fix** | MSM8909 modem doesn't use BAM DMUX — data path is PPP over SMD. Modem never sets SMSM A2_POWER_CONTROL; 0x4044000 not in iomem. BAM DMUX/RMNET configs disabled. |
 | Modem data (PPP) | **In progress** | eSIM attaches to network. AT+CGDCONT/CGACT/CGDATA work over smd7. PPP kernel support enabled. Next: pppd in Alpine rootfs to bring up ppp0 interface. |
-| WCD codec regmap | **Open** | msm8x16-wcd uses old .read/.write callbacks, not regmap. `snd_soc_cache_sync()` crashes on NULL regmap in 4.4. Guarded with NULL check (skips sync). Blocks audio, not modem. |
+| Spontaneous reboot | **In progress** | Instant SoC death during fast fbcon output (e.g. `dmesg` scrolling). No panic/watchdog — PMIC Hard Reset. Display is fbtft (SPI BAM DMA), not MDP3. Fixed `spi_qsd.c` ignoring `is_dma_mapped` (redundant DMA map/unmap on coherent buffer). May also need FIFO mode or bus scaling fix. See `hard_crash.md`. |
+| WCD codec regmap | **Resolved** | Added regmap wrapper (REGCACHE_FLAT). Sound card registers, audio playback works via Q6 DSP. |
 | lpm-levels deep idle | **Won't fix** | Stock OEM kernel ships with `lpm_levels.sleep_disabled=1`. Broadcast timer (arch_mem_timer) never fires (0 interrupts) — likely silicon/TZ limitation. Per-CPU power collapse savings marginal (6-18 mW). WFI-only idle is fine. |
-| Bus scaling crashes | **Workaround**: QCOM_BUS_SCALING + BIMC_BWMON disabled | Kernel hangs before init when enabled. Needs DT or driver debug. |
+| Bus scaling crashes | **Workaround**: QCOM_BUS_SCALING + BIMC_BWMON disabled | Kernel hangs before init when enabled. Needs DT or driver debug. Related to spontaneous reboot — no DDR QoS arbitration. |
