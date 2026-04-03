@@ -45,17 +45,18 @@ Every repeated command goes in the `justfile`. Run `just` to list recipes.
 ## Workflow: Commit Before Flash
 
 1. **Commit first** — git commit before building/flashing
-2. **Build and boot** — `just cycle` (builds kernel + boot.img, boots via fastboot)
-3. **Record outcome** — `just note "PASS: description"` or `just note "FAIL: description"`
+2. **Build** — `just bootimg` (builds kernel + modules + boot.img)
+3. **Flash or boot** — `just flash` (permanent) or `just boot` (RAM-only)
+4. **Record outcome** — `just note "PASS: description"` or `just note "FAIL: description"`
 
 ## Workflow: Iteration Cycle
 
-The device boots our 4.4 kernel via `fastboot boot` (RAM, not flashed). The 3.18 kernel remains on the boot partition. Reboot-to-bootloader works from both kernels.
-
-- **`just cycle`** — build kernel + boot.img (eMMC rootfs) → `fastboot boot` → wait for serial → grab dmesg (requires device in fastboot)
-- **`just recycle`** — reboot current device → cycle (fully autonomous, no manual intervention)
-- **`just serial "cmd"`** — run a command on the device via USB serial (`/dev/ttyACM0`)
+- **`just bootimg`** — full build: kernel + modules + boot.img
+- **`just boot`** — fastboot boot (RAM, temporary — requires device in fastboot)
+- **`just flash`** — fastboot flash boot partition (permanent — requires device in fastboot)
 - **`just dev-reboot`** — reboot to fastboot via `/usr/local/bin/reboot-bootloader` on device
+- **`just grab-dmesg`** — capture dmesg from device via serial
+- **`just serial "cmd"`** — run a command on the device via USB serial (`/dev/ttyACM0`)
 
 The serial console is USB ACM via configfs gadget on `ttyGS0` (device) / `ttyACM0` (host). The Alpine rootfs (p36) sets up USB gadget via OpenRC (`usb-gadget` at boot, `usb-gadget-ecm` at default runlevel).
 
@@ -106,6 +107,8 @@ When porting a subsystem from 3.18 to 4.4:
 | GCC 7.4 | GCC 8+ breaks BUILD_BUG_ON; GCC 4.9 works but old |
 | lpm-levels disabled | Breaks timer in idle; sleep hangs. WFI via default arch_cpu_idle works. |
 | always-on arch timer | Prevents C3STOP handoff to broken broadcast timer |
+| PPP over SMD | Modem data path is PPP over SMD (smd7), not BAM DMUX. AT commands for APN/PDP, then pppd over the SMD tty. |
+| ~~BAM DMUX~~ | ~~Not used on MSM8909~~ — modem never sets SMSM A2_POWER_CONTROL; 0x4044000 not mapped in iomem. |
 | ~~Two-hop reboot~~ | ~~4.4 SPMI children don't enumerate → no PON → reboot via 3.18~~ (resolved: SPMI+PON work, direct reboot-to-bootloader from 4.4) |
 
 ## Known Issues
@@ -116,7 +119,8 @@ When porting a subsystem from 3.18 to 4.4:
 | WiFi (WCNSS) | **Resolved** | Working: wlan0 up, IPv4+IPv6, internet connectivity. Prima wlan.ko module. |
 | SPMI child enumeration | **Resolved** | Fixed: 4.4-style DT bindings + CONFIG_MFD_SPMI_PMIC. |
 | Modem Q6 stalled init | **Resolved** | Root cause: modem needs `rmt_storage` daemon for EFS partition I/O. Without it, modem init stalls at 55s watchdog. With rmt_storage running, modem fully initializes: APR audio, DIAG, DATA channels all created. |
-| BAM DMUX data path | **Open** | Modem A2 task alive but never sets SMSM A2_POWER_CONTROL. BAM HW works (force init: 0x04044000, 6 pipes). Forcing crashes modem: `a2_power.c:2783:A2 Assertion Failed`. All AP-side causes ruled out. Need modem DIAG logs to identify A2 precondition. `msm_rmnet_bam.c` ported, ready to create rmnet interfaces once BAM initializes. |
+| BAM DMUX data path | **Won't fix** | MSM8909 modem doesn't use BAM DMUX — data path is PPP over SMD. Modem never sets SMSM A2_POWER_CONTROL; 0x4044000 not in iomem. BAM DMUX/RMNET configs disabled. |
+| Modem data (PPP) | **In progress** | eSIM attaches to network. AT+CGDCONT/CGACT/CGDATA work over smd7. PPP kernel support enabled. Next: pppd in Alpine rootfs to bring up ppp0 interface. |
 | WCD codec regmap | **Open** | msm8x16-wcd uses old .read/.write callbacks, not regmap. `snd_soc_cache_sync()` crashes on NULL regmap in 4.4. Guarded with NULL check (skips sync). Blocks audio, not modem. |
 | lpm-levels deep idle | **Won't fix** | Stock OEM kernel ships with `lpm_levels.sleep_disabled=1`. Broadcast timer (arch_mem_timer) never fires (0 interrupts) — likely silicon/TZ limitation. Per-CPU power collapse savings marginal (6-18 mW). WFI-only idle is fine. |
 | Bus scaling crashes | **Workaround**: QCOM_BUS_SCALING + BIMC_BWMON disabled | Kernel hangs before init when enabled. Needs DT or driver debug. |

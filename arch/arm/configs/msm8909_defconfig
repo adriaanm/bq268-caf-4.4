@@ -156,17 +156,20 @@ CONFIG_MSM_IPC_ROUTER_SMD_XPRT=y
 # QMI framework
 CONFIG_MSM_QMI_INTERFACE=y
 
-# BAM DMUX — modem data path (SMSM A2_POWER_CONTROL handshake)
-CONFIG_MSM_BAM_DMUX=y
-
-# RMNET — modem network data (MAP protocol over BAM DMUX)
-CONFIG_RMNET_DATA=y
-
-# USB BAM — disabled, crashes at probe (DTS node exists but driver may conflict)
+# BAM DMUX / RMNET — not needed, data path is PPP over SMD
+# CONFIG_MSM_BAM_DMUX is not set
+# CONFIG_RMNET_DATA is not set
 # CONFIG_USB_BAM is not set
+# CONFIG_MSM_RMNET_BAM is not set
 
-# RMNET BAM — network interfaces (rmnet0-7) from BAM DMUX channels
-CONFIG_MSM_RMNET_BAM=y
+# PPP — modem data path is PPP over SMD (not BAM DMUX)
+CONFIG_PPP=y
+CONFIG_PPP_ASYNC=y
+CONFIG_PPP_SYNC_TTY=y
+CONFIG_PPP_DEFLATE=y
+CONFIG_PPP_BSDCOMP=y
+CONFIG_PPP_MPPE=y
+CONFIG_PPP_FILTER=y
 
 # Modem shared memory
 CONFIG_MEM_SHARE_QMI_SERVICE=y

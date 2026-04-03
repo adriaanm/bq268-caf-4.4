@@ -121,20 +121,10 @@ dev-reboot:
 
 # ── Iteration cycle ────────────────────────────────────
 
-# full cycle: build → boot (eMMC rootfs p36) → wait for serial → grab dmesg
-cycle: bootimg
-    #!/usr/bin/env bash
-    echo "=== Booting device ==="
-    fastboot boot {{out}}/boot-$(git rev-parse --short HEAD).img
-    just wait-serial
-    echo "=== Device booted, grabbing dmesg ==="
+# grab dmesg from device via serial
+grab-dmesg:
     just serial "dmesg" "15" | tee {{out}}/dmesg-$(git rev-parse --short HEAD).txt
-    echo "=== dmesg saved to {{out}}/dmesg-$(git rev-parse --short HEAD).txt ==="
-
-# reboot device, rebuild, boot, grab dmesg
-recycle:
-    just dev-reboot
-    just cycle
+    @echo "=== dmesg saved to {{out}}/dmesg-$(git rev-parse --short HEAD).txt ==="
 
 # ── Interactive ────────────────────────────────────────
 
