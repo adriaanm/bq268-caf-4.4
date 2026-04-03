@@ -246,6 +246,7 @@ struct fbtft_par {
 	} gamma;
 	unsigned long debug;
 	bool first_update_done;
+	int update_in_progress;
 	ktime_t update_time;
 	bool bgr;
 	bool blanked;

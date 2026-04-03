@@ -354,6 +354,8 @@ static void fbtft_update_display(struct fbtft_par *par, unsigned start_line,
 	if (par->blanked)
 		return;
 
+	smp_store_release(&par->update_in_progress, 1);
+
 	if (unlikely(par->debug & (DEBUG_TIME_FIRST_UPDATE | DEBUG_TIME_EACH_UPDATE))) {
 		if ((par->debug & DEBUG_TIME_EACH_UPDATE) ||
 				((par->debug & DEBUG_TIME_FIRST_UPDATE) && !par->first_update_done)) {
@@ -411,6 +413,17 @@ static void fbtft_update_display(struct fbtft_par *par, unsigned start_line,
 			throughput, fps);
 		par->first_update_done = true;
 	}
+
+	smp_store_release(&par->update_in_progress, 0);
+
+	/* If dirty lines accumulated while we were transferring,
+	 * schedule another update to flush them.
+	 */
+	spin_lock(&par->dirty_lock);
+	if (par->dirty_lines_start <= par->dirty_lines_end)
+		schedule_delayed_work(&par->info->deferred_work,
+				      par->info->fbdefio->delay);
+	spin_unlock(&par->dirty_lock);
 }
 
 static void fbtft_mkdirty(struct fb_info *info, int y, int height)
@@ -431,6 +444,14 @@ static void fbtft_mkdirty(struct fb_info *info, int y, int height)
 	if (y + height - 1 > par->dirty_lines_end)
 		par->dirty_lines_end = y + height - 1;
 	spin_unlock(&par->dirty_lock);
+
+	/* If a display update (SPI transfer) is already in progress,
+	 * just accumulate dirty lines -- the next deferred_io cycle
+	 * will pick them up.  This prevents queueing SPI transactions
+	 * faster than the bus can drain them.
+	 */
+	if (smp_load_acquire(&par->update_in_progress))
+		return;
 
 	/* Schedule deferred_io to update display (no-op if already on queue)*/
 	schedule_delayed_work(&info->deferred_work, fbdefio->delay);
@@ -518,14 +539,25 @@ static ssize_t fbtft_fb_write(struct fb_info *info, const char __user *buf,
 {
 	struct fbtft_par *par = info->par;
 	ssize_t res;
+	unsigned long line_length = info->fix.line_length;
+	int y, height;
 
 	dev_dbg(info->dev,
 		"%s: count=%zd, ppos=%llu\n", __func__,  count, *ppos);
 	res = fb_sys_write(info, buf, count, ppos);
 
-	/* TODO: only mark changed area
-	   update all for now */
-	par->fbtftops.mkdirty(info, -1, 0);
+	if (res > 0 && line_length) {
+		/* Mark only the lines that were actually written.
+		 * fb_sys_write advanced *ppos; written range is
+		 * [*ppos - res .. *ppos - 1] in bytes.
+		 */
+		unsigned long start_byte = *ppos - res;
+		unsigned long end_byte = *ppos - 1;
+
+		y = start_byte / line_length;
+		height = end_byte / line_length - y + 1;
+		par->fbtftops.mkdirty(info, y, height);
+	}
 
 	return res;
 }
