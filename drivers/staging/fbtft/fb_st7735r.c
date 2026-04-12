@@ -13,6 +13,7 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
+#include <linux/delay.h>
 #include <video/mipi_display.h>
 
 #include "fbtft.h"
@@ -117,6 +118,19 @@ static int set_gamma(struct fbtft_par *par, unsigned long *curves)
 }
 #undef CURVE
 
+static int blank(struct fbtft_par *par, bool on)
+{
+	if (on) {
+		write_reg(par, MIPI_DCS_SET_DISPLAY_OFF);
+		write_reg(par, MIPI_DCS_ENTER_SLEEP_MODE);
+	} else {
+		write_reg(par, MIPI_DCS_EXIT_SLEEP_MODE);
+		mdelay(120);
+		write_reg(par, MIPI_DCS_SET_DISPLAY_ON);
+	}
+	return 0;
+}
+
 static struct fbtft_display display = {
 	.regwidth = 8,
 	.width = 128,
@@ -129,6 +143,7 @@ static struct fbtft_display display = {
 		.set_addr_win = set_addr_win,
 		.set_var = set_var,
 		.set_gamma = set_gamma,
+		.blank = blank,
 	},
 };
 
