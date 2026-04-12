@@ -249,12 +249,12 @@ CONFIG_DEVMEM=y
 # IOMMU
 CONFIG_MSM_IOMMU_V1=y
 
-# CPU frequency governors — ondemand as default (scales down at idle)
+# CPU frequency governors — boot at max, switch to ondemand from userspace
 CONFIG_CPU_FREQ_GOV_ONDEMAND=y
 CONFIG_CPU_FREQ_GOV_CONSERVATIVE=y
 CONFIG_CPU_FREQ_GOV_POWERSAVE=y
 CONFIG_CPU_FREQ_GOV_USERSPACE=y
-CONFIG_CPU_FREQ_DEFAULT_GOV_ONDEMAND=y
+CONFIG_CPU_FREQ_DEFAULT_GOV_PERFORMANCE=y
 
 # Bus scaling — disabled to bisect boot regression
 # CONFIG_QCOM_BUS_SCALING is not set
