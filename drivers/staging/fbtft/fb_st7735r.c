@@ -126,6 +126,11 @@ static int blank(struct fbtft_par *par, bool on)
 	} else {
 		write_reg(par, MIPI_DCS_EXIT_SLEEP_MODE);
 		mdelay(120);
+		/* SLEEP_IN resets pixel format and MADCTL to defaults —
+		   re-send them before turning the display back on */
+		write_reg(par, MIPI_DCS_SET_PIXEL_FORMAT,
+			  MIPI_DCS_PIXEL_FMT_16BIT);
+		par->fbtftops.set_var(par);
 		write_reg(par, MIPI_DCS_SET_DISPLAY_ON);
 	}
 	return 0;
