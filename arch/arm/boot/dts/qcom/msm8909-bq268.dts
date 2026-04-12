@@ -581,12 +581,12 @@
 			linux,code = <0x3d>; /* KEY_F3 */
 		};
 
-		/* key_f6: GPIO112 active-high */
-		key_f6 {
-			label = "key_f6";
+		/* Power toggle switch: GPIO112 active-high */
+		power_switch {
+			label = "power_switch";
 			gpios = <&msm_gpio 112 0x0>;
-			linux,input-type = <1>;
-			linux,code = <0x44>; /* KEY_F6 */
+			linux,input-type = <5>; /* EV_SW */
+			linux,code = <0x00>; /* SW_LID */
 			debounce-interval = <15>;
 			gpio-key,wakeup;
 		};
@@ -673,7 +673,7 @@
 
 &pm8909_pon {
 	qcom,pon_2 {
-		linux,code = <0x3e>; /* KEY_DOT */
+		linux,code = <0x3e>; /* KEY_F4 (single-dot key) */
 		qcom,support-reset = <0>;
 		qcom,s1-timer = <3072>;
 		qcom,s2-timer = <2000>;
