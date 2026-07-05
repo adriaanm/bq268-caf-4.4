@@ -5771,7 +5771,8 @@ static struct regmap_config msm8x16_wcd_regmap_config = {
 	.volatile_reg = msm8x16_wcd_regmap_volatile,
 	.reg_defaults_raw = msm8x16_wcd_reset_reg_defaults,
 	.num_reg_defaults_raw = MSM8X16_WCD_CACHE_SIZE,
-	.cache_type = REGCACHE_FLAT,
+	/* REGCACHE_NONE: write-through, matches 3.18 custom write path. FLAT cache silently dropped RX writes matching its seed while the codec soft-resets itself -> silent playback. Verified on-device via cache_bypass=Y. */
+	.cache_type = REGCACHE_NONE,
 };
 
 static int msm8x16_wcd_codec_probe(struct snd_soc_codec *codec)
