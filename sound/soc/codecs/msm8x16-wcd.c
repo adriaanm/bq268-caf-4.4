@@ -5556,6 +5556,18 @@ static int msm8x16_wcd_device_up(struct snd_soc_codec *codec)
 		codec->cache_init = true;
 		snd_soc_cache_sync(codec);
 		codec->cache_init = false;
+		/*
+		 * The cache is now populated and synced to hardware. Bypass it
+		 * for all further access: the codec soft-resets its RX blocks
+		 * during stream enable, and with the cache active regmap drops
+		 * the RX config writes whose value already matches the (now
+		 * stale) cache -- the register cache reads back correct while the
+		 * speaker stays silent. Bypassing routes every write straight to
+		 * SPMI/digital hardware (equivalent to the proven runtime
+		 * cache_bypass=Y). cache_type stays REGCACHE_FLAT so this and the
+		 * sync above never hit regcache_sync()'s BUG_ON.
+		 */
+		regcache_cache_bypass(codec->component.regmap, true);
 	}
 
 	msm8x16_wcd_write(codec, MSM8X16_WCD_A_DIGITAL_INT_EN_SET,
@@ -5771,8 +5783,16 @@ static struct regmap_config msm8x16_wcd_regmap_config = {
 	.volatile_reg = msm8x16_wcd_regmap_volatile,
 	.reg_defaults_raw = msm8x16_wcd_reset_reg_defaults,
 	.num_reg_defaults_raw = MSM8X16_WCD_CACHE_SIZE,
-	/* REGCACHE_NONE: write-through, matches 3.18 custom write path. FLAT cache silently dropped RX writes matching its seed while the codec soft-resets itself -> silent playback. Verified on-device via cache_bypass=Y. */
-	.cache_type = REGCACHE_NONE,
+	/*
+	 * REGCACHE_FLAT (seeded from reset_reg_defaults) is required: the codec
+	 * registers adsp_state_callback -> msm8x16_wcd_device_up ->
+	 * snd_soc_cache_sync(), and regcache_sync() BUG_ON()s without a cache.
+	 * The cache silently drops RX writes matching its seed while the codec
+	 * soft-resets itself (-> silent playback), so device_up enables
+	 * regcache_cache_bypass() right after the one-time sync to force all
+	 * later writes through to hardware. See msm8x16_wcd_device_up().
+	 */
+	.cache_type = REGCACHE_FLAT,
 };
 
 static int msm8x16_wcd_codec_probe(struct snd_soc_codec *codec)
