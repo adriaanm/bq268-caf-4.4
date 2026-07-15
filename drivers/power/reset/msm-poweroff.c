@@ -399,12 +399,14 @@ static void do_msm_poweroff(void)
 	set_dload_mode(0);
 	scm_disable_sdi();
 	qpnp_pon_system_pwr_off(PON_POWER_OFF_SHUTDOWN);
-	/* Disable auto-power-on triggers that fire spuriously (CBL is
-	 * tied to battery, USB detects the charging circuit).  Keep
-	 * KPDPWR_N (power button) enabled so user can turn device on. */
+	/* Arm the charger power-on triggers so plugging in USB (or the
+	 * cradle's DC) while off cold-boots the SoC into aboot, which runs
+	 * the off-mode charge indicator.  Keep KPDPWR_N (power key) enabled
+	 * for normal power-on.  Leave CBLPWR_N off (tied to the always-present
+	 * battery -> would instantly re-power) and SMPL off (spurious). */
 	qpnp_pon_trigger_config(PON_CBLPWR_N, false);
-	qpnp_pon_trigger_config(PON_USB_CHG, false);
-	qpnp_pon_trigger_config(PON_DC_CHG, false);
+	qpnp_pon_trigger_config(PON_USB_CHG, true);
+	qpnp_pon_trigger_config(PON_DC_CHG, true);
 	qpnp_pon_trigger_config(PON_SMPL, false);
 	qpnp_pon_trigger_config(PON_KPDPWR_N, true);
 
