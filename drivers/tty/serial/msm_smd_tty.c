@@ -637,8 +637,12 @@ static void smd_tty_port_shutdown(struct tty_port *tport)
 	struct tty_struct *tty = tty_port_tty_get(tport);
 	unsigned long flags;
 
-	info = tty->driver_data;
-	if (info == 0) {
+	/* Derive info from the port, not from the tty: the hangup path
+	 * (tty_port_hangup) clears port->tty before calling shutdown, so
+	 * tty_port_tty_get() returns NULL there. The tty is only needed to
+	 * clear its driver_data, which is skipped when it is already gone. */
+	info = container_of(tport, struct smd_tty_info, port);
+	if (!info->ch) {
 		tty_kref_put(tty);
 		return;
 	}
@@ -656,7 +660,8 @@ static void smd_tty_port_shutdown(struct tty_port *tport)
 	SMD_TTY_INFO("%s with PID %u closed port %s",
 			current->comm, current->pid,
 			info->ch_name);
-	tty->driver_data = NULL;
+	if (tty)
+		tty->driver_data = NULL;
 	del_timer(&info->buf_req_timer);
 
 	smd_close(info->ch);
@@ -807,6 +812,15 @@ static const struct tty_port_operations smd_tty_port_ops = {
 	.activate = smd_tty_port_activate,
 };
 
+static void smd_tty_hangup(struct tty_struct *tty)
+{
+	struct smd_tty_info *info = tty->driver_data;
+
+	if (!info)
+		return;
+	tty_port_hangup(&info->port);
+}
+
 static const struct tty_operations smd_tty_ops = {
 	.open = smd_tty_open,
 	.close = smd_tty_close,
@@ -816,6 +830,7 @@ static const struct tty_operations smd_tty_ops = {
 	.unthrottle = smd_tty_unthrottle,
 	.tiocmget = smd_tty_tiocmget,
 	.tiocmset = smd_tty_tiocmset,
+	.hangup = smd_tty_hangup,
 };
 
 static int smd_tty_pm_notifier(struct notifier_block *nb,
