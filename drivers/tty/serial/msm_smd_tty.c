@@ -139,6 +139,11 @@ static LIST_HEAD(smd_tty_pfdriver_list);
 
 static int is_in_reset(struct smd_tty_info *info)
 {
+	/* A port whose tty_port was shut down has driver_data == NULL; the
+	 * tty layer can still deliver operations on that tty. Treat the
+	 * torn-down port as in-reset rather than dereferencing NULL. */
+	if (!info)
+		return 1;
 	return info->in_reset;
 }
 
@@ -709,12 +714,18 @@ static int smd_tty_write(struct tty_struct *tty, const unsigned char *buf,
 static int smd_tty_write_room(struct tty_struct *tty)
 {
 	struct smd_tty_info *info = tty->driver_data;
+
+	if (!info)
+		return 0;
 	return smd_write_avail(info->ch);
 }
 
 static int smd_tty_chars_in_buffer(struct tty_struct *tty)
 {
 	struct smd_tty_info *info = tty->driver_data;
+
+	if (!info)
+		return 0;
 	return smd_read_avail(info->ch);
 }
 
@@ -722,6 +733,9 @@ static void smd_tty_unthrottle(struct tty_struct *tty)
 {
 	struct smd_tty_info *info = tty->driver_data;
 	unsigned long flags;
+
+	if (!info)
+		return;
 
 	spin_lock_irqsave(&info->reset_lock_lha2, flags);
 	if (info->is_open) {
@@ -744,6 +758,12 @@ static int smd_tty_tiocmget(struct tty_struct *tty)
 	unsigned long flags;
 	int tiocm;
 
+	/* smd_tty_port_shutdown() clears driver_data; a modem-control ioctl
+	 * arriving after that (pppd does exactly this on reopen) must not
+	 * dereference NULL in kernel context. */
+	if (!info)
+		return -ENETRESET;
+
 	tiocm = smd_tiocmget(info->ch);
 
 	spin_lock_irqsave(&info->reset_lock_lha2, flags);
@@ -764,7 +784,7 @@ static int smd_tty_tiocmset(struct tty_struct *tty,
 {
 	struct smd_tty_info *info = tty->driver_data;
 
-	if (info->in_reset)
+	if (!info || info->in_reset)
 		return -ENETRESET;
 
 	SMD_TTY_INFO("PID %u --> %s Set: %x Clear: %x",
