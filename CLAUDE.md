@@ -124,8 +124,8 @@ When porting a subsystem from 3.18 to 4.4:
 | SPMI child enumeration | **Resolved** | Fixed: 4.4-style DT bindings + CONFIG_MFD_SPMI_PMIC. |
 | Modem Q6 stalled init | **Resolved** | Root cause: modem needs `rmt_storage` daemon for EFS partition I/O. Without it, modem init stalls at 55s watchdog. With rmt_storage running, modem fully initializes: APR audio, DIAG, DATA channels all created. |
 | BAM DMUX data path | **Won't fix** | MSM8909 modem doesn't use BAM DMUX — data path is PPP over SMD. Modem never sets SMSM A2_POWER_CONTROL; 0x4044000 not in iomem. BAM DMUX/RMNET configs disabled. |
-| Modem data (PPP) | **In progress** | eSIM attaches to network. AT+CGDCONT/CGACT/CGDATA work over smd7. PPP kernel support enabled. Next: pppd in Alpine rootfs to bring up ppp0 interface. |
-| Spontaneous reboot | **In progress** | Instant SoC death during fast fbcon output (e.g. `dmesg` scrolling). No panic/watchdog — PMIC Hard Reset. Display is fbtft (SPI BAM DMA), not MDP3. Fixed `spi_qsd.c` ignoring `is_dma_mapped` (redundant DMA map/unmap on coherent buffer). May also need FIFO mode or bus scaling fix. See `hard_crash.md`. |
+| Modem data (PPP) | **Resolved** | Full cellular data via PPP over SMD (smd7). pppd on Alpine brings up ppp0 interface. |
+| Spontaneous reboot | **Resolved** | Was instant SoC death during fast fbcon output. Fixed by backporting MIPI DBI SPI transfer discipline from mainline + `spi_qsd.c` `is_dma_mapped` fix. See `hard_crash.md`. |
 | WCD codec regmap | **Resolved** | Added regmap wrapper (REGCACHE_FLAT). Sound card registers, audio playback works via Q6 DSP. |
 | lpm-levels deep idle | **Won't fix** | Stock OEM kernel ships with `lpm_levels.sleep_disabled=1`. Broadcast timer (arch_mem_timer) never fires (0 interrupts) — likely silicon/TZ limitation. Per-CPU power collapse savings marginal (6-18 mW). WFI-only idle is fine. |
 | Bus scaling crashes | **Workaround**: QCOM_BUS_SCALING + BIMC_BWMON disabled | Kernel hangs before init when enabled. Needs DT or driver debug. Related to spontaneous reboot — no DDR QoS arbitration. |

@@ -17,7 +17,7 @@ Modem fully working: rmt_storage, PPP over SMD data path, AT commands, RF/networ
 
 ## High Priority — Stability
 
-- [ ] **Spontaneous reboot during fast fbcon output.** Crash narrows to rapid framebuffer writes (fbcon scrolling dmesg is enough — wata not required). PMIC Hard Reset, no panic/watchdog. **Root cause analysis (2026-04-03):** Display is fbtft (`fb_st7735r`) over SPI5 BAM DMA, not MDP3. `spi_qsd.c` ignored `spi_message.is_dma_mapped` flag — unconditionally called `dma_map_single()` on fbtft's pre-mapped coherent DMA buffer. **Fix applied:** `spi_qsd.c` now respects `is_dma_mapped`, skipping redundant map/unmap. On MSM8909 (non-highmem), the double-mapping was coincidentally harmless (same DMA address), so this fix alone may not resolve the crash. **Full analysis and test plan in `hard_crash.md`.** **Next steps:** (a) Test with fix applied. (b) If still crashes, try FIFO mode (remove `qcom,use-bam` from SPI5 DTS). (c) Try `fbtft.fps=5` to reduce SPI bus utilization. (d) Check pstore after crash. (e) Investigate `CONFIG_QCOM_BUS_SCALING` boot crash.
+- [x] ~~**Spontaneous reboot during fast fbcon output.**~~ Resolved by backporting MIPI DBI SPI transfer discipline from mainline + `spi_qsd.c` `is_dma_mapped` fix. No reboots observed since. See `hard_crash.md` for full analysis.
 
 ## Normal Priority — Modem & Diagnostics
 
@@ -33,7 +33,7 @@ Modem fully working: rmt_storage, PPP over SMD data path, AT commands, RF/networ
 
 - [x] ~~**Test microphone capture.**~~ Working. TX capture uses TERT_MI2S_TX (not PRI_MI2S_TX — machine driver routes RX via Primary, TX via Tertiary MI2S). Mixer path: `MultiMedia1 Mixer TERT_MI2S_TX=1`, `DEC1 MUX=ADC1`, `ADC1 Volume=8`, `DEC1 Volume=104`. Record: `arecord -D hw:0,0 -f S16_LE -r 48000 -c 1`. Handset mic (AMIC1) confirmed working with loopback test.
 
-- [ ] **Test with SIM card inserted.** Modem RF works (sees networks) but NAS status is `limited` (no SIM). BAM DMUX A2_POWER_CONTROL may require PS-attached state. Insert prepaid SIM → check if A2 activates → if yes, rmnet interfaces should come up.
+- [x] ~~**Cellular data via PPP over SMD.**~~ Working. Full cellular data connectivity via pppd over smd7.
 
 - [ ] **Suspend-to-RAM.** `CONFIG_SUSPEND=y` but untested. Separate from cpuidle/lpm-levels. Try `echo mem > /sys/power/state`. Important for battery life on a portable device.
 
@@ -49,7 +49,7 @@ Modem fully working: rmt_storage, PPP over SMD data path, AT commands, RF/networ
 
 ## Low Priority — Polish
 
-- [ ] **Change defconfig default CPU governor.** Currently `CPU_FREQ_DEFAULT_GOV_PERFORMANCE` — CPUs locked at 1267 MHz. Switch to `ondemand` or `interactive` in defconfig so the kernel starts scaling immediately, even before userspace acts. Rootfs sets interactive at boot, but the default wastes power during early boot.
+- [x] ~~**CPU frequency governors.**~~ All governors enabled in defconfig. Default is performance (fast boot); userspace switches to ondemand after boot.
 
 - [ ] **Audit DTS for unused enabled peripherals.** Anything left enabled that isn't used (unused I2C/UART/SPI buses, camera/CSI clocks) draws quiescent current. Disable in bq268 DTS overlay.
 
